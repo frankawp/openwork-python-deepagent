@@ -101,6 +101,19 @@ function getModelInstance(
       model,
       apiKey: apiKey
     })
+  } else if (model.startsWith("deepseek")) {
+    const apiKey = getApiKey("deepseek")
+    console.log("[Runtime] DeepSeek API key present:", !!apiKey)
+    if (!apiKey) {
+      throw new Error("DeepSeek API key not configured")
+    }
+    return new ChatOpenAI({
+      model,
+      apiKey: apiKey,
+      configuration: {
+        baseURL: "https://api.deepseek.com"
+      }
+    })
   }
 
   // Default to model string (let deepagents handle it)

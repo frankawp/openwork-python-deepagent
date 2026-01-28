@@ -23,7 +23,8 @@ const store = new Store({
 const PROVIDERS: Omit<Provider, "hasApiKey">[] = [
   { id: "anthropic", name: "Anthropic" },
   { id: "openai", name: "OpenAI" },
-  { id: "google", name: "Google" }
+  { id: "google", name: "Google" },
+  { id: "deepseek", name: "DeepSeek" }
 ]
 
 // Available models configuration (updated Jan 2026)
@@ -200,6 +201,23 @@ const AVAILABLE_MODELS: ModelConfig[] = [
     provider: "google",
     model: "gemini-2.5-flash-lite",
     description: "Fast, low-cost, high-performance model",
+    available: true
+  },
+  // DeepSeek models
+  {
+    id: "deepseek-chat",
+    name: "DeepSeek Chat",
+    provider: "deepseek",
+    model: "deepseek-chat",
+    description: "DeepSeek-V3.2 非思考模式，快速响应",
+    available: true
+  },
+  {
+    id: "deepseek-reasoner",
+    name: "DeepSeek Reasoner",
+    provider: "deepseek",
+    model: "deepseek-reasoner",
+    description: "DeepSeek-V3.2 思考模式，深度推理",
     available: true
   }
 ]

@@ -33,10 +33,27 @@ function GoogleIcon({ className }: { className?: string }): React.JSX.Element {
   )
 }
 
+function DeepSeekIcon({ className }: { className?: string }): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path
+        d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <circle cx="12" cy="12" r="3" fill="currentColor" />
+    </svg>
+  )
+}
+
 const PROVIDER_ICONS: Record<ProviderId, React.FC<{ className?: string }>> = {
   anthropic: AnthropicIcon,
   openai: OpenAIIcon,
   google: GoogleIcon,
+  deepseek: DeepSeekIcon,
   ollama: () => null // No icon for ollama yet
 }
 
@@ -44,7 +61,8 @@ const PROVIDER_ICONS: Record<ProviderId, React.FC<{ className?: string }>> = {
 const FALLBACK_PROVIDERS: Provider[] = [
   { id: "anthropic", name: "Anthropic", hasApiKey: false },
   { id: "openai", name: "OpenAI", hasApiKey: false },
-  { id: "google", name: "Google", hasApiKey: false }
+  { id: "google", name: "Google", hasApiKey: false },
+  { id: "deepseek", name: "DeepSeek", hasApiKey: false }
 ]
 
 interface ModelSwitcherProps {
