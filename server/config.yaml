@@ -1,0 +1,13 @@
+database:
+  url: "mysql+pymysql://fish:32KjyZ_uW9L9_Q5@rm-bp1ro28t9mm34p058to.mysql.rds.aliyuncs.com:3306/cowork"
+auth:
+  jwt_secret: "dev-secret-change-me"
+  access_ttl_min: 60
+  refresh_ttl_days: 7
+workspace:
+  root: "/tmp/openwork/workspaces"
+data:
+  dir: "/tmp/openwork/data"
+admin:
+  email: "admin@example.com"
+  password: "admin123"

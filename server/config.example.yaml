@@ -1,0 +1,13 @@
+database:
+  url: "mysql+pymysql://user:pass@host:3306/openwork"
+auth:
+  jwt_secret: "CHANGE_ME"
+  access_ttl_min: 60
+  refresh_ttl_days: 7
+workspace:
+  root: "/var/lib/openwork/workspaces"
+data:
+  dir: "/var/lib/openwork"
+admin:
+  email: "admin@example.com"
+  password: "admin123"
