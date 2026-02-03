@@ -89,7 +89,8 @@ export function attachWindowApi() {
         message: string,
         command: unknown,
         onEvent: (event: unknown) => void,
-        modelId?: string
+        modelId?: string,
+        skillsEnabled?: boolean
       ) => {
         const controller = new AbortController()
         fetch(`${API_BASE}/agent/stream`, {
@@ -100,7 +101,8 @@ export function attachWindowApi() {
             thread_id: threadId,
             message,
             command,
-            model_id: modelId
+            model_id: modelId,
+            skills_enabled: skillsEnabled ?? true
           }),
           signal: controller.signal
         })

@@ -26,14 +26,16 @@ def _serialize_sse(payload: dict) -> str:
 
 
 async def _agent_stream(
-    payload: AgentStreamRequest, workspace_path: str
+    payload: AgentStreamRequest, workspace_path: str, username: str
 ) -> AsyncGenerator[str, None]:
     msg_id = str(uuid.uuid4())
     try:
         agent = create_runtime(
             thread_id=payload.thread_id,
             workspace_path=workspace_path,
+            username=username,
             model_id=payload.model_id,
+            skills_enabled=payload.skills_enabled,
         )
 
         config = {"configurable": {"thread_id": payload.thread_id}}
@@ -66,5 +68,5 @@ async def _agent_stream(
 def stream_agent(payload: AgentStreamRequest, _user: User = Depends(get_current_user)):
     cfg = load_config()
     workspace_path = str(Path(cfg.workspace.root) / _user.username)
-    generator = _agent_stream(payload, workspace_path)
+    generator = _agent_stream(payload, workspace_path, _user.username)
     return StreamingResponse(generator, media_type="text/event-stream")

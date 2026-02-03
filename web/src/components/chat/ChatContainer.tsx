@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo, useCallback } from "react"
-import { Send, Square, Loader2, AlertCircle, X } from "lucide-react"
+import { Send, Square, Loader2, AlertCircle, X, Zap, ZapOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAppStore } from "@/lib/store"
@@ -11,6 +11,7 @@ import { WorkspacePicker } from "./WorkspacePicker"
 import { selectWorkspaceFolder } from "@/lib/workspace-utils"
 import { ChatTodos } from "./ChatTodos"
 import { ContextUsageIndicator } from "./ContextUsageIndicator"
+import { cn } from "@/lib/utils"
 import type { Message } from "@/types"
 
 interface AgentStreamValues {
@@ -47,6 +48,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     workspacePath,
     tokenUsage,
     currentModel,
+    skillsEnabled,
     draftInput: input,
     setTodos,
     setWorkspaceFiles,
@@ -55,7 +57,8 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     appendMessage,
     setError,
     clearError,
-    setDraftInput: setInput
+    setDraftInput: setInput,
+    setSkillsEnabled
   } = useCurrentThread(threadId)
 
   // Get the stream data via subscription - reactive updates without re-rendering provider
@@ -76,13 +79,13 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       try {
         await stream.submit(null, {
           command: { resume: { decision } },
-          config: { configurable: { thread_id: threadId, model_id: currentModel } }
+          config: { configurable: { thread_id: threadId, model_id: currentModel, skills_enabled: skillsEnabled } }
         })
       } catch (err) {
         console.error("[ChatContainer] Resume command failed:", err)
       }
     },
-    [pendingApproval, setPendingApproval, stream, threadId, currentModel]
+    [pendingApproval, setPendingApproval, stream, threadId, currentModel, skillsEnabled]
   )
 
   const agentValues = stream?.values as AgentStreamValues | undefined
@@ -267,7 +270,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       },
       {
         config: {
-          configurable: { thread_id: threadId, model_id: currentModel }
+          configurable: { thread_id: threadId, model_id: currentModel, skills_enabled: skillsEnabled }
         }
       }
     )
@@ -419,6 +422,23 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
                 <ModelSwitcher threadId={threadId} />
                 <div className="w-px h-4 bg-border" />
                 <WorkspacePicker threadId={threadId} />
+                <div className="w-px h-4 bg-border" />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSkillsEnabled(!skillsEnabled)}
+                  className={cn(
+                    "h-7 gap-1.5 px-2 text-xs",
+                    skillsEnabled
+                      ? "text-status-nominal hover:text-status-nominal"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  title={skillsEnabled ? "Skills enabled" : "Skills disabled"}
+                >
+                  {skillsEnabled ? <Zap className="size-3.5" /> : <ZapOff className="size-3.5" />}
+                  <span>Skills</span>
+                </Button>
               </div>
               {tokenUsage && (
                 <ContextUsageIndicator tokenUsage={tokenUsage} modelId={currentModel} />

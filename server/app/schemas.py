@@ -78,6 +78,7 @@ class AgentStreamRequest(BaseModel):
     message: str
     model_id: Optional[str] = None
     command: Optional[dict[str, Any]] = None
+    skills_enabled: bool = True
 
 
 class WorkspaceFile(BaseModel):

@@ -42,6 +42,7 @@ export interface ThreadState {
   pendingApproval: HITLRequest | null
   error: string | null
   currentModel: string
+  skillsEnabled: boolean
   openFiles: OpenFile[]
   activeTab: "agent" | string
   fileContents: Record<string, string>
@@ -71,6 +72,7 @@ export interface ThreadActions {
   setError: (error: string | null) => void
   clearError: () => void
   setCurrentModel: (modelId: string) => void
+  setSkillsEnabled: (enabled: boolean) => void
   openFile: (path: string, name: string) => void
   closeFile: (path: string) => void
   setActiveTab: (tab: "agent" | string) => void
@@ -106,6 +108,7 @@ const createDefaultThreadState = (): ThreadState => ({
   pendingApproval: null,
   error: null,
   currentModel: "claude-sonnet-4-5-20250929",
+  skillsEnabled: true,
   openFiles: [],
   activeTab: "agent",
   fileContents: {},
@@ -490,6 +493,9 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
               })
             }
           })
+        },
+        setSkillsEnabled: (enabled: boolean) => {
+          updateThreadState(threadId, () => ({ skillsEnabled: enabled }))
         },
         openFile: (path: string, name: string) => {
           updateThreadState(threadId, (state) => {

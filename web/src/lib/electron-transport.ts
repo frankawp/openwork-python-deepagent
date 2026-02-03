@@ -98,9 +98,10 @@ export class ElectronIPCTransport implements UseStreamTransport {
     this.activeSubagents.clear()
     this.accumulatedToolCalls.clear()
     this.completedToolCallsByName.clear()
-    // Extract thread ID and model ID from config
+    // Extract thread ID, model ID and skills_enabled from config
     const threadId = payload.config?.configurable?.thread_id
     const modelId = payload.config?.configurable?.model_id as string | undefined
+    const skillsEnabled = payload.config?.configurable?.skills_enabled as boolean | undefined
     if (!threadId) {
       return this.createErrorGenerator("MISSING_THREAD_ID", "Thread ID is required")
     }
@@ -128,7 +129,8 @@ export class ElectronIPCTransport implements UseStreamTransport {
       messageContent,
       payload.command,
       payload.signal,
-      modelId
+      modelId,
+      skillsEnabled
     )
   }
 
@@ -144,7 +146,8 @@ export class ElectronIPCTransport implements UseStreamTransport {
     message: string,
     command: unknown,
     signal: AbortSignal,
-    modelId?: string
+    modelId?: string,
+    skillsEnabled?: boolean
   ): AsyncGenerator<StreamEvent> {
     // Create a queue to buffer events from IPC
     const eventQueue: StreamEvent[] = []
@@ -164,7 +167,7 @@ export class ElectronIPCTransport implements UseStreamTransport {
       }
     }
 
-    // Start the stream via IPC (pass modelId to use the selected model)
+    // Start the stream via IPC (pass modelId and skillsEnabled)
     const cleanup = window.api.agent.streamAgent(
       threadId,
       message,
@@ -190,7 +193,8 @@ export class ElectronIPCTransport implements UseStreamTransport {
           }
         }
       },
-      modelId
+      modelId,
+      skillsEnabled
     )
 
     // Handle abort signal

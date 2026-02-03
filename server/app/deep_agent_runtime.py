@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
@@ -14,6 +15,7 @@ from .crypto import decrypt
 from .db import SessionLocal
 from .model_catalog import DEFAULT_MODEL_ID, MODELS
 from .models import AppSetting, GlobalApiKey
+from .skills import get_user_skills_path
 from .system_prompt import build_system_prompt
 
 
@@ -98,11 +100,20 @@ def _get_model_instance(model_id: str | None) -> BaseChatModel:
 def create_runtime(
     thread_id: str,
     workspace_path: str,
+    username: str,
     model_id: str | None = None,
+    skills_enabled: bool = True,
 ) -> Any:
     model = _get_model_instance(model_id)
     checkpointer = MySQLSaver()
     backend = FilesystemBackend(root_dir=workspace_path, virtual_mode=True)
+
+    # 构建 skills 路径（用户级别）
+    skills_paths: list[str | Path] = []
+    if skills_enabled:
+        skills_path = get_user_skills_path(username)
+        if skills_path:
+            skills_paths.append(skills_path)
 
     system_prompt = build_system_prompt(workspace_path)
     execute_tool = make_execute_tool(workspace_path)
@@ -110,6 +121,7 @@ def create_runtime(
     agent = create_deep_agent(
         model=model,
         tools=[execute_tool],
+        skills=skills_paths,
         system_prompt=SystemMessage(content=system_prompt),
         backend=backend,
         checkpointer=checkpointer,

@@ -18,6 +18,7 @@ from .config import load_config
 from .db import SessionLocal
 from .model_catalog import DEFAULT_MODEL_ID
 from .models import AppSetting, User
+from .skills import init_user_skills
 
 app = FastAPI(title="Openwork Server")
 
@@ -66,6 +67,10 @@ def startup() -> None:
         if not default_model:
             db.add(AppSetting(key="default_model", value=DEFAULT_MODEL_ID))
             db.commit()
+
+        # 初始化所有用户的 skills 目录
+        for user in db.query(User).all():
+            init_user_skills(user.username)
     finally:
         db.close()
 
