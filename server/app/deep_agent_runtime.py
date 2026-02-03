@@ -109,11 +109,11 @@ def create_runtime(
     backend = FilesystemBackend(root_dir=workspace_path, virtual_mode=True)
 
     # 构建 skills 路径（用户级别）
-    skills_paths: list[str | Path] = []
+    skills_paths: list[str] = []
     if skills_enabled:
         skills_path = get_user_skills_path(username)
         if skills_path:
-            skills_paths.append(skills_path)
+            skills_paths.append(str(skills_path))
 
     system_prompt = build_system_prompt(workspace_path)
     execute_tool = make_execute_tool(workspace_path)
