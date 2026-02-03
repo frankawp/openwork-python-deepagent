@@ -4,12 +4,13 @@ import base64
 import json
 import os
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from watchfiles import awatch
 
+from ..checkpointer_mysql import MySQLSaver
 from ..config import load_config
 from ..deps import get_current_user
 from ..schemas import WorkspaceListOut, WorkspaceReadOut
@@ -40,6 +41,20 @@ def _safe_path(workspace: Path, rel_path: str) -> Path:
     if not str(full).startswith(str(workspace)):
         raise HTTPException(status_code=403, detail="Access denied")
     return full
+
+
+def _file_data_to_string(file_data: Any) -> str:
+    if isinstance(file_data, dict):
+        content = file_data.get("content")
+        if isinstance(content, list):
+            return "\n".join(str(line) for line in content)
+        if isinstance(content, str):
+            return content
+    if isinstance(file_data, list):
+        return "\n".join(str(line) for line in file_data)
+    if isinstance(file_data, str):
+        return file_data
+    return ""
 
 
 @router.get("")
@@ -117,6 +132,57 @@ def read_file_binary(thread_id: str, path: str, user: User = Depends(get_current
         "size": stat.st_size,
         "modified_at": str(stat.st_mtime),
     }
+
+
+@router.post("/sync")
+def sync_to_disk(payload: dict, user: User = Depends(get_current_user)):
+    thread_id = payload.get("thread_id") or payload.get("threadId")
+    if not thread_id:
+        raise HTTPException(status_code=400, detail="thread_id is required")
+
+    workspace = _ensure_workspace(user)
+    checkpointer = MySQLSaver()
+    config = {"configurable": {"thread_id": thread_id}}
+    checkpoint_tuple = checkpointer.get_tuple(config)
+
+    if not checkpoint_tuple:
+        return {"success": True, "written": 0, "errors": [], "message": "No checkpoint"}
+
+    checkpoint = checkpoint_tuple.checkpoint or {}
+    files = None
+
+    if isinstance(checkpoint, dict):
+        channel_values = checkpoint.get("channel_values")
+        if isinstance(channel_values, dict):
+            files = channel_values.get("files")
+        if files is None:
+            files = checkpoint.get("files")
+
+    if not isinstance(files, dict):
+        return {"success": True, "written": 0, "errors": [], "message": "No files to sync"}
+
+    written = 0
+    errors: list[dict[str, str]] = []
+
+    for path, file_data in files.items():
+        if not isinstance(path, str):
+            continue
+        if path in ("", "/"):
+            continue
+
+        try:
+            full = _safe_path(workspace, path)
+            if path.endswith("/"):
+                full.mkdir(parents=True, exist_ok=True)
+                continue
+            full.parent.mkdir(parents=True, exist_ok=True)
+            content = _file_data_to_string(file_data)
+            full.write_text(content, "utf-8")
+            written += 1
+        except Exception as e:
+            errors.append({"path": str(path), "error": str(e)})
+
+    return {"success": len(errors) == 0, "written": written, "errors": errors}
 
 
 async def _watch_workspace(workspace: Path, thread_id: str) -> AsyncGenerator[str, None]:

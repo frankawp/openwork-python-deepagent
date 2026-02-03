@@ -516,7 +516,7 @@ function FilesContent(): React.JSX.Element {
   const setWorkspacePath = threadState?.setWorkspacePath
   const setWorkspaceFiles = threadState?.setWorkspaceFiles
   const [syncing, setSyncing] = useState(false)
-  const [syncSuccess] = useState(false)
+  const [syncSuccess, setSyncSuccess] = useState(false)
 
   // Load workspace path and files for current thread
   useEffect(() => {
@@ -589,8 +589,22 @@ function FilesContent(): React.JSX.Element {
       return
     }
 
-    // syncToDisk is not yet implemented
-    console.warn("[FilesContent] syncToDisk is not yet implemented")
+    setSyncing(true)
+    try {
+      const result = await window.api.workspace.syncToDisk(currentThreadId)
+      if (result?.success) {
+        setSyncSuccess(true)
+        setTimeout(() => setSyncSuccess(false), 1500)
+      }
+      const refreshed = await window.api.workspace.loadFromDisk(currentThreadId)
+      if (refreshed.success && refreshed.files) {
+        setWorkspaceFiles?.(refreshed.files)
+      }
+    } catch (e) {
+      console.error("[FilesContent] syncToDisk failed:", e)
+    } finally {
+      setSyncing(false)
+    }
   }
 
   return (

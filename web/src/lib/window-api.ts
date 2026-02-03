@@ -162,6 +162,11 @@ export function attachWindowApi() {
         apiFetch(`/workspace/file?thread_id=${threadId}&path=${encodeURIComponent(filePath)}`),
       readBinaryFile: (threadId: string, filePath: string) =>
         apiFetch(`/workspace/file-binary?thread_id=${threadId}&path=${encodeURIComponent(filePath)}`),
+      syncToDisk: (threadId: string) =>
+        apiFetch("/workspace/sync", {
+          method: "POST",
+          body: JSON.stringify({ thread_id: threadId })
+        }),
       onFilesChanged: (callback: (data: { threadId: string; workspacePath: string }) => void) => {
         const threadId = "default"
         const source = new EventSource(`${API_BASE}/workspace/changes?thread_id=${threadId}`, {
