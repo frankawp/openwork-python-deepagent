@@ -12,9 +12,10 @@ from watchfiles import awatch
 
 from ..checkpointer_mysql import MySQLSaver
 from ..config import load_config
+from ..db import SessionLocal
 from ..deps import get_current_user
 from ..schemas import WorkspaceListOut, WorkspaceReadOut
-from ..models import User
+from ..models import Thread, User
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -139,6 +140,14 @@ def sync_to_disk(payload: dict, user: User = Depends(get_current_user)):
     thread_id = payload.get("thread_id") or payload.get("threadId")
     if not thread_id:
         raise HTTPException(status_code=400, detail="thread_id is required")
+
+    db = SessionLocal()
+    try:
+        thread = db.get(Thread, thread_id)
+        if not thread or thread.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Thread not found")
+    finally:
+        db.close()
 
     workspace = _ensure_workspace(user)
     checkpointer = MySQLSaver()

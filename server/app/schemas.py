@@ -81,6 +81,13 @@ class AgentStreamRequest(BaseModel):
     skills_enabled: bool = True
 
 
+class AgentInterruptRequest(BaseModel):
+    thread_id: str
+    decision: dict[str, Any]
+    model_id: Optional[str] = None
+    skills_enabled: bool = True
+
+
 class WorkspaceFile(BaseModel):
     path: str
     is_dir: bool

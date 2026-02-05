@@ -51,11 +51,8 @@ export function FilesystemPanel() {
     const cleanup = window.api.workspace.onFilesChanged(async (data) => {
       // Only refresh if this is the current thread
       if (data.threadId === currentThreadId) {
-        console.log("[FilesystemPanel] Files changed, syncing to disk and refreshing...")
+        console.log("[FilesystemPanel] Files changed, refreshing...")
         try {
-          // 先 sync 将内存文件同步到磁盘
-          await window.api.workspace.syncToDisk(data.threadId)
-          // 再从磁盘读取文件列表
           const result = await window.api.workspace.loadFromDisk(data.threadId)
           if (result.success) {
             setWorkspaceFiles(result.files)

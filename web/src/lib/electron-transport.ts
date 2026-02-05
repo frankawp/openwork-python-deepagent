@@ -167,35 +167,50 @@ export class ElectronIPCTransport implements UseStreamTransport {
       }
     }
 
-    // Start the stream via IPC (pass modelId and skillsEnabled)
-    const cleanup = window.api.agent.streamAgent(
-      threadId,
-      message,
-      command,
-      (ipcEvent) => {
-        // Convert IPC events to SDK format
-        const sdkEvents = this.convertToSDKEvents(ipcEvent as IPCEvent, threadId)
+    const handleIpcEvent = (ipcEvent: unknown) => {
+      // Convert IPC events to SDK format
+      const sdkEvents = this.convertToSDKEvents(ipcEvent as IPCEvent, threadId)
 
-        for (const sdkEvent of sdkEvents) {
-          if (sdkEvent.event === "done" || sdkEvent.event === "error") {
-            isDone = true
-            hasError = sdkEvent.event === "error"
-          }
-
-          // If someone is waiting for the next event, resolve immediately
-          if (resolveNext) {
-            const resolve = resolveNext
-            resolveNext = null
-            resolve(sdkEvent)
-          } else {
-            // Otherwise queue the event
-            eventQueue.push(sdkEvent)
-          }
+      for (const sdkEvent of sdkEvents) {
+        if (sdkEvent.event === "done" || sdkEvent.event === "error") {
+          isDone = true
+          hasError = sdkEvent.event === "error"
         }
-      },
-      modelId,
-      skillsEnabled
-    )
+
+        // If someone is waiting for the next event, resolve immediately
+        if (resolveNext) {
+          const resolve = resolveNext
+          resolveNext = null
+          resolve(sdkEvent)
+        } else {
+          // Otherwise queue the event
+          eventQueue.push(sdkEvent)
+        }
+      }
+    }
+
+    const hasResumeCommand = !!(command && typeof command === "object" && "resume" in command)
+    const isElectron = Boolean(window.api?.process?.platform)
+    const useInterruptEndpoint =
+      hasResumeCommand && !isElectron && typeof window.api.agent.interrupt === "function"
+
+    // Start the stream via API (pass modelId and skillsEnabled)
+    const cleanup = useInterruptEndpoint
+      ? window.api.agent.interrupt(
+          threadId,
+          (command as { resume?: unknown }).resume,
+          handleIpcEvent,
+          modelId,
+          skillsEnabled
+        )
+      : window.api.agent.streamAgent(
+          threadId,
+          message,
+          command,
+          handleIpcEvent,
+          modelId,
+          skillsEnabled
+        )
 
     // Handle abort signal
     if (signal) {
@@ -332,32 +347,38 @@ export class ElectronIPCTransport implements UseStreamTransport {
         if (interrupt) {
           // Check if this is the new array format from langchain HITL
           if (Array.isArray(interrupt) && interrupt.length > 0) {
-            const interruptValue = interrupt[0]?.value
-            const actionRequests = interruptValue?.actionRequests
-            const reviewConfigs = interruptValue?.reviewConfigs
+        const interruptValue = interrupt[0]?.value
+        const actionRequests = interruptValue?.actionRequests || interruptValue?.action_requests
+        const reviewConfigs = interruptValue?.reviewConfigs || interruptValue?.review_configs
 
             if (actionRequests?.length) {
               const firstAction = actionRequests[0]
               const reviewConfig = reviewConfigs?.find(
-                (rc: { actionName: string }) => rc.actionName === firstAction.name
+                (rc: { actionName?: string; action_name?: string }) =>
+                  rc.actionName === firstAction.name || rc.action_name === firstAction.name
               )
+
+              let toolCallId: string | undefined
+              const trackedToolCalls = this.completedToolCallsByName.get(firstAction.name)
+              if (trackedToolCalls && trackedToolCalls.length > 0) {
+                toolCallId = trackedToolCalls[trackedToolCalls.length - 1].id
+              }
 
               events.push({
                 event: "custom",
                 data: {
                   type: "interrupt",
                   request: {
-                    id: firstAction.id || crypto.randomUUID(),
+                    id: toolCallId || crypto.randomUUID(),
                     tool_call: {
-                      id: firstAction.id,
+                      id: toolCallId,
                       name: firstAction.name,
                       args: firstAction.args || {}
                     },
-                    allowed_decisions: reviewConfig?.allowedDecisions || [
-                      "approve",
-                      "reject",
-                      "edit"
-                    ]
+                    allowed_decisions:
+                      reviewConfig?.allowedDecisions ||
+                      reviewConfig?.allowed_decisions ||
+                      ["approve", "reject", "edit"]
                   }
                 }
               })
@@ -664,14 +685,17 @@ export class ElectronIPCTransport implements UseStreamTransport {
       // Emit interrupt - langchain HITL returns __interrupt__ as array of { value: HITLRequest }
       if (state.__interrupt__?.length) {
         const interruptValue = state.__interrupt__[0]?.value
-        const actionRequests = interruptValue?.actionRequests
-        const reviewConfigs = interruptValue?.reviewConfigs
+        const actionRequests = interruptValue?.actionRequests || interruptValue?.action_requests
+        const reviewConfigs = interruptValue?.reviewConfigs || interruptValue?.review_configs
 
         // For each action request (tool call) that needs approval
         if (actionRequests?.length) {
           // Get the first action request for now (can be extended for batch approvals)
           const firstAction = actionRequests[0]
-          const reviewConfig = reviewConfigs?.find((rc) => rc.actionName === firstAction.name)
+          const reviewConfig = reviewConfigs?.find(
+            (rc: { actionName?: string; action_name?: string }) =>
+              rc.actionName === firstAction.name || rc.action_name === firstAction.name
+          )
 
           // The actionRequest doesn't include tool_call.id - look up from tracked tool calls
           let toolCallId: string | undefined
@@ -696,7 +720,10 @@ export class ElectronIPCTransport implements UseStreamTransport {
                   name: firstAction.name,
                   args: firstAction.args || {}
                 },
-                allowed_decisions: reviewConfig?.allowedDecisions || ["approve", "reject", "edit"]
+                allowed_decisions:
+                  reviewConfig?.allowedDecisions ||
+                  reviewConfig?.allowed_decisions ||
+                  ["approve", "reject", "edit"]
               }
             }
           })
@@ -747,6 +774,13 @@ export class ElectronIPCTransport implements UseStreamTransport {
       // Update name if provided
       if (chunk.name) {
         accumulated.name = chunk.name
+        if (chunk.id) {
+          const existing = this.completedToolCallsByName.get(chunk.name) || []
+          if (!existing.some((t) => t.id === chunk.id)) {
+            existing.push({ id: chunk.id, name: chunk.name, args: {} })
+            this.completedToolCallsByName.set(chunk.name, existing)
+          }
+        }
       }
 
       // Accumulate args

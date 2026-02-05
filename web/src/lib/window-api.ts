@@ -118,6 +118,37 @@ export function attachWindowApi() {
 
         return () => controller.abort()
       },
+      interrupt: (
+        threadId: string,
+        decision: Record<string, unknown>,
+        onEvent: (event: unknown) => void,
+        modelId?: string,
+        skillsEnabled?: boolean
+      ) => {
+        const controller = new AbortController()
+        fetch(`${API_BASE}/agent/interrupt`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            thread_id: threadId,
+            decision,
+            model_id: modelId,
+            skills_enabled: skillsEnabled ?? true
+          }),
+          signal: controller.signal
+        })
+          .then((res) => {
+            if (!res.body) return
+            const cleanup = parseSSE(res.body, (data) => onEvent(data))
+            controller.signal.addEventListener("abort", () => cleanup())
+          })
+          .catch(() => {
+            onEvent({ type: "error", error: "STREAM_ERROR" })
+          })
+
+        return () => controller.abort()
+      },
       cancel: async (_threadId: string) => {
         return
       }

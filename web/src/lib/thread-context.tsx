@@ -650,8 +650,8 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
           const interruptData = channelValues?.__interrupt__
           if (interruptData && Array.isArray(interruptData) && interruptData.length > 0) {
             const interruptValue = interruptData[0]?.value
-            const actionRequests = interruptValue?.actionRequests
-            const reviewConfigs = interruptValue?.reviewConfigs
+            const actionRequests = interruptValue?.actionRequests || interruptValue?.action_requests
+            const reviewConfigs = interruptValue?.reviewConfigs || interruptValue?.review_configs
 
             if (actionRequests && actionRequests.length > 0) {
               // New langchain HITL format
@@ -660,8 +660,8 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
                 id: crypto.randomUUID(),
                 tool_call: {
                   id: crypto.randomUUID(),
-                  name: req.action,
-                  args: req.args
+                  name: req.action || req.name,
+                  args: req.args || {}
                 },
                 allowed_decisions: ["approve", "reject", "edit"]
               }
@@ -673,10 +673,11 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
                 id: crypto.randomUUID(),
                 tool_call: {
                   id: crypto.randomUUID(),
-                  name: config.toolName,
-                  args: config.toolArgs
+                  name: config.toolName || config.tool_name,
+                  args: config.toolArgs || config.tool_args
                 },
-                allowed_decisions: ["approve", "reject", "edit"]
+                allowed_decisions:
+                  config.allowedDecisions || config.allowed_decisions || ["approve", "reject", "edit"]
               }
               actions.setPendingApproval(hitlRequest)
             }

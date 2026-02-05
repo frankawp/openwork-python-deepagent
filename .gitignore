@@ -5,3 +5,6 @@ out
 .eslintcache
 *.log*
 release
+__pycache__/
+*.pyc
+server/uv.lock

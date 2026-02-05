@@ -58,6 +58,31 @@ def _json_safe(value: Any) -> Any:
     return {"__type__": value.__class__.__name__, "repr": repr(value)}
 
 
+def _normalize_interrupts(checkpoint: dict[str, Any]) -> dict[str, Any]:
+    channel_values = checkpoint.get("channel_values")
+    if not isinstance(channel_values, dict):
+        return checkpoint
+    interrupts = channel_values.get("__interrupt__")
+    if not isinstance(interrupts, (list, tuple)):
+        return checkpoint
+
+    normalized = []
+    for item in interrupts:
+        if hasattr(item, "value"):
+            normalized.append(
+                {
+                    "value": getattr(item, "value"),
+                    "id": getattr(item, "id", None),
+                }
+            )
+        elif isinstance(item, dict) and "value" in item:
+            normalized.append(item)
+        else:
+            normalized.append({"value": item, "id": None})
+
+    return {**checkpoint, "channel_values": {**channel_values, "__interrupt__": normalized}}
+
+
 @router.get("", response_model=list[ThreadOut])
 def list_threads(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     threads = (
@@ -192,6 +217,8 @@ def thread_history(
                     normalized.append(msg)
             channel_values = {**channel_values, "messages": normalized}
             checkpoint = {**checkpoint, "channel_values": channel_values}
+
+        checkpoint = _normalize_interrupts(checkpoint)
 
         history.append(
             {

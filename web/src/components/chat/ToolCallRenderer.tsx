@@ -60,6 +60,15 @@ function getFileName(path: string): string {
   return path.split("/").pop() || path
 }
 
+function isRejectedToolOutput(output: string): boolean {
+  const normalized = output.toLowerCase()
+  return (
+    normalized.includes("rejected the tool call") ||
+    normalized.includes("tool call was rejected") ||
+    normalized.includes("user rejected")
+  )
+}
+
 // Render todos nicely
 function TodosDisplay({ todos }: { todos: Todo[] }): React.JSX.Element {
   const statusConfig: Record<string, { icon: typeof Circle; color: string }> = {
@@ -460,11 +469,15 @@ export function ToolCallRenderer({
         // When expanded, output is shown in CommandDisplay - just show status
         // When collapsed, show the output preview
         const output = typeof result === "string" ? result : JSON.stringify(result)
+        const rejected = isRejectedToolOutput(output)
+        const statusText = rejected ? "Command rejected" : "Command completed"
+        const statusClass = rejected ? "text-status-warning" : "text-status-nominal"
+        const StatusIcon = rejected ? XCircle : CheckCircle2
         if (isExpanded) {
           return (
-            <div className="text-xs text-status-nominal flex items-center gap-1.5">
-              <CheckCircle2 className="size-3" />
-              <span>Command completed</span>
+            <div className={`text-xs ${statusClass} flex items-center gap-1.5`}>
+              <StatusIcon className="size-3" />
+              <span>{statusText}</span>
             </div>
           )
         }
@@ -472,9 +485,9 @@ export function ToolCallRenderer({
         if (output.trim()) {
           return (
             <div className="space-y-2">
-              <div className="text-xs text-status-nominal flex items-center gap-1.5">
-                <CheckCircle2 className="size-3" />
-                <span>Command completed</span>
+              <div className={`text-xs ${statusClass} flex items-center gap-1.5`}>
+                <StatusIcon className="size-3" />
+                <span>{statusText}</span>
               </div>
               <pre className="text-xs font-mono bg-background rounded-sm p-2 overflow-auto max-h-32 text-muted-foreground whitespace-pre-wrap break-all">
                 {output.slice(0, 500)}
@@ -484,9 +497,9 @@ export function ToolCallRenderer({
           )
         }
         return (
-          <div className="text-xs text-status-nominal flex items-center gap-1.5">
-            <CheckCircle2 className="size-3" />
-            <span>Command completed (no output)</span>
+          <div className={`text-xs ${statusClass} flex items-center gap-1.5`}>
+            <StatusIcon className="size-3" />
+            <span>{rejected ? "Command rejected" : "Command completed (no output)"}</span>
           </div>
         )
       }

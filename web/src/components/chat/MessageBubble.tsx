@@ -118,7 +118,11 @@ export function MessageBubble({
             {message.tool_calls!.map((toolCall, index) => {
               const result = toolResults?.get(toolCall.id)
               const pendingId = pendingApproval?.tool_call?.id
-              const needsApproval = Boolean(pendingId && pendingId === toolCall.id)
+              const pendingName = pendingApproval?.tool_call?.name
+              const needsApproval = Boolean(
+                (pendingId && pendingId === toolCall.id) ||
+                  (!pendingId && pendingName && pendingName === toolCall.name)
+              )
               return (
                 <ToolCallRenderer
                   key={`${toolCall.id || `tc-${index}`}-${needsApproval ? "pending" : "done"}`}
