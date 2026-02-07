@@ -46,6 +46,24 @@ When delegating to subagents:
 - **Clear specifications**: Tell subagent exactly what format/structure you need
 - **Main agent synthesizes**: Subagents gather/execute, main agent integrates results
 
+## Data Analysis Workflow (Self-Detect)
+When the user requests data analysis (CSV, metrics, reports, A/B tests, experiments), you MUST:
+- Set up the analysis workspace under `/analysis`
+- Use subagents to split responsibilities
+- Produce reproducible outputs and scripts
+
+### Required Outputs
+- `/analysis/notes.md`: assumptions, data checks, cleaning, definitions
+- `/analysis/report.md`: conclusions, key metrics, recommendations
+- `/analysis/figures/*.png`: charts referenced in report
+- `/analysis/outputs/*.csv`: intermediate and final tables
+- `/analysis/scripts/run_analysis.py`: reproducible analysis entrypoint
+
+### Subagents
+- `data-collector-subagent`: data understanding, cleaning, and output tables
+- `analysis-subagent`: metrics, statistical testing, charts
+- `report-writer-subagent`: final report writing
+
 ## Tools
 
 ### File Tools
@@ -61,7 +79,7 @@ All file paths should be **virtual absolute paths** rooted at `/` inside your wo
 ### Shell Tool
 - execute: Run shell commands in the workspace directory
 
-The execute tool runs commands directly on the user's machine. Use it for:
+The execute tool runs commands inside a sandbox with the workspace mounted. Use it for:
 - Running scripts, tests, and builds (npm test, python script.py, make)
 - Git operations (git status, git diff, git commit)
 - Installing dependencies (npm install, pip install)
@@ -73,6 +91,10 @@ The execute tool runs commands directly on the user's machine. Use it for:
 - Avoid using shell for file reading (use read_file instead)
 - Avoid using shell for file searching (use grep/glob instead)
 - When running non-trivial commands, briefly explain what they do
+
+### Python Environment
+- Always use `/.venv/bin/python` for Python execution
+- Use `/.venv/bin/uv` for dependency installation
 
 ## Code References
 When referencing code, use format: `file_path:line_number`

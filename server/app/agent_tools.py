@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import os
 import shlex
-import subprocess
 from pathlib import Path
-from typing import Callable
-
 from langchain_core.tools import tool
 
+from .analysis_env import build_execution_env
+from .sandbox.types import SandboxRunner
 
 def _is_within_root(path: Path, root: Path) -> bool:
     try:
@@ -64,7 +62,12 @@ def _rewrite_virtual_paths_in_command(command: str, workspace_root: str) -> str:
         return " ".join(shlex.quote(token) for token in rewritten)
 
 
-def make_execute_tool(workspace_path: str, timeout_seconds: int = 120, max_output_bytes: int = 100_000):
+def make_execute_tool(
+    workspace_path: str,
+    sandbox: SandboxRunner,
+    timeout_seconds: int = 120,
+    max_output_bytes: int = 100_000,
+):
     @tool("execute")
     def execute(command: str) -> str:
         """Run a shell command in the workspace directory and return output."""
@@ -73,34 +76,13 @@ def make_execute_tool(workspace_path: str, timeout_seconds: int = 120, max_outpu
 
         command = _rewrite_virtual_paths_in_command(command, workspace_path)
 
-        try:
-            proc = subprocess.run(
-                command,
-                shell=True,
-                cwd=workspace_path,
-                env={**os.environ, "WORKSPACE_ROOT": workspace_path},
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-            )
-        except subprocess.TimeoutExpired:
-            return f"Error: Command timed out after {timeout_seconds} seconds."
-        except Exception as e:
-            return f"Error: Failed to run command. {e}"
-
-        output = ""
-        if proc.stdout:
-            output += proc.stdout
-        if proc.stderr:
-            for line in proc.stderr.splitlines():
-                output += f"[stderr] {line}\n"
-
-        if not output.strip():
-            output = "<no output>"
-
-        if len(output) > max_output_bytes:
-            output = output[:max_output_bytes] + "\n\n... Output truncated."
-
-        return output
+        env = build_execution_env(workspace_path)
+        result = sandbox.run(
+            command,
+            env=env,
+            timeout_seconds=timeout_seconds,
+            max_output_bytes=max_output_bytes,
+        )
+        return result.output
 
     return execute

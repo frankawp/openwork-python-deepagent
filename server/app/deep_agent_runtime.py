@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
@@ -10,12 +9,15 @@ from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 
 from .agent_tools import make_execute_tool
+from .analysis_env import ensure_analysis_environment
+from .config import load_config
 from .checkpointer_mysql import MySQLSaver
 from .crypto import decrypt
 from .db import SessionLocal
 from .model_catalog import DEFAULT_MODEL_ID, MODELS
 from .models import AppSetting, GlobalApiKey
-from .skills import get_user_skills_path
+from .sandbox.nsjail_sandbox import NsjailSandbox
+from .skills import get_workspace_skills_path, init_workspace_skills
 from .system_prompt import build_system_prompt
 
 
@@ -107,16 +109,36 @@ def create_runtime(
     model = _get_model_instance(model_id)
     checkpointer = MySQLSaver()
     backend = FilesystemBackend(root_dir=workspace_path, virtual_mode=True)
+    cfg = load_config()
+
+    if cfg.sandbox.enabled:
+        sandbox = NsjailSandbox(workspace_path, cfg.sandbox)
+    else:
+        raise RuntimeError("Sandbox is required but disabled in config")
+
+    ensure_analysis_environment(
+        workspace_path,
+        sandbox,
+        timeout_seconds=cfg.sandbox.time_limit_sec,
+        max_output_bytes=cfg.sandbox.max_output_bytes,
+    )
+
+    init_workspace_skills(workspace_path)
 
     # 构建 skills 路径（用户级别）
     skills_paths: list[str] = []
     if skills_enabled:
-        skills_path = get_user_skills_path(username)
+        skills_path = get_workspace_skills_path(workspace_path)
         if skills_path:
             skills_paths.append(str(skills_path))
 
     system_prompt = build_system_prompt(workspace_path)
-    execute_tool = make_execute_tool(workspace_path)
+    execute_tool = make_execute_tool(
+        workspace_path,
+        sandbox,
+        timeout_seconds=cfg.sandbox.time_limit_sec,
+        max_output_bytes=cfg.sandbox.max_output_bytes,
+    )
 
     agent = create_deep_agent(
         model=model,
