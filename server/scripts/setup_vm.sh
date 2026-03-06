@@ -7,7 +7,7 @@ SERVER_DIR="$PROJECT_DIR/server"
 printf "==> Install system deps\n"
 sudo apt-get update
 sudo apt-get install -y \
-  python3.11 python3.11-venv python3.11-dev \
+  python3 python3-venv python3-dev \
   build-essential pkg-config git curl \
   autoconf bison flex gcc g++ libprotobuf-dev libnl-route-3-dev libtool protobuf-compiler \
   mysql-server
@@ -35,7 +35,7 @@ sudo mysql -e "GRANT ALL PRIVILEGES ON openwork.* TO 'openwork'@'localhost'; FLU
 
 printf "==> Update config.yaml\n"
 cd "$SERVER_DIR"
-python3.11 - <<'PY'
+python3 - <<'PY'
 import yaml
 from pathlib import Path
 cfg_path = Path("config.yaml")
@@ -45,7 +45,7 @@ cfg_path.write_text(yaml.safe_dump(data, sort_keys=False))
 PY
 
 printf "==> Create venv and install deps\n"
-python3.11 -m venv .venv
+python3 -m venv .venv
 . .venv/bin/activate
 pip install -U pip
 pip install uv

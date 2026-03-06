@@ -16,7 +16,7 @@ from .crypto import decrypt
 from .db import SessionLocal
 from .model_catalog import DEFAULT_MODEL_ID, MODELS
 from .models import AppSetting, GlobalApiKey
-from .sandbox.nsjail_sandbox import NsjailSandbox
+from .sandbox import build_sandbox
 from .skills import get_workspace_skills_path, init_workspace_skills
 from .system_prompt import build_system_prompt
 
@@ -111,10 +111,7 @@ def create_runtime(
     backend = FilesystemBackend(root_dir=workspace_path, virtual_mode=True)
     cfg = load_config()
 
-    if cfg.sandbox.enabled:
-        sandbox = NsjailSandbox(workspace_path, cfg.sandbox)
-    else:
-        raise RuntimeError("Sandbox is required but disabled in config")
+    sandbox = build_sandbox(workspace_path, cfg.sandbox)
 
     ensure_analysis_environment(
         workspace_path,
