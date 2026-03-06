@@ -10,6 +10,8 @@ def make_sandbox_config(**overrides) -> SandboxConfig:
     data = {
         "enabled": True,
         "nsjail_path": "nsjail",
+        "allow_local_fallback": True,
+        "disable_clone_newns": False,
         "rootfs_dir": ".sandbox-root",
         "readonly_bind_mounts": ["/bin", "/usr", "/usr/local", "/lib", "/lib64", "/etc"],
         "mount_dev": True,

@@ -14,6 +14,8 @@ admin:
 sandbox:
   enabled: true
   nsjail_path: "nsjail"
+  allow_local_fallback: false
+  disable_clone_newns: true
   rootfs_dir: ".sandbox-root"
   readonly_bind_mounts:
     - "/bin"

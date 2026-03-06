@@ -11,6 +11,8 @@ def make_sandbox_config(**overrides) -> SandboxConfig:
     data = {
         "enabled": True,
         "nsjail_path": "nsjail",
+        "allow_local_fallback": True,
+        "disable_clone_newns": False,
         "rootfs_dir": ".sandbox-root",
         "readonly_bind_mounts": ["/bin", "/usr", "/usr/local", "/lib", "/lib64", "/etc"],
         "mount_dev": True,
@@ -34,7 +36,7 @@ class SandboxFactoryTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Sandbox is required"):
                 build_sandbox(tmpdir, make_sandbox_config(enabled=False))
 
-    def test_returns_local_sandbox_on_non_linux(self) -> None:
+    def test_returns_local_sandbox_on_non_linux_when_fallback_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             with (
                 patch("app.sandbox.platform.system", return_value="Darwin"),
@@ -44,8 +46,16 @@ class SandboxFactoryTests(unittest.TestCase):
 
             self.assertIsInstance(sandbox, LocalSandbox)
             self.assertTrue(
-                any("Falling back to LocalSandbox" in entry for entry in logs.output)
+                any("UNSAFE_LOCAL_SANDBOX enabled" in entry for entry in logs.output)
             )
+
+    def test_raises_on_non_linux_when_fallback_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with (
+                patch("app.sandbox.platform.system", return_value="Darwin"),
+                self.assertRaisesRegex(RuntimeError, "Sandbox unavailable for this runtime"),
+            ):
+                build_sandbox(tmpdir, make_sandbox_config(allow_local_fallback=False))
 
     def test_returns_nsjail_sandbox_on_linux_when_binary_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -67,7 +77,13 @@ class SandboxFactoryTests(unittest.TestCase):
                 patch("app.sandbox.shutil.which", return_value=None),
                 self.assertLogs("app.sandbox", level="WARNING") as logs,
             ):
-                sandbox = build_sandbox(tmpdir, make_sandbox_config(nsjail_path="missing-nsjail"))
+                sandbox = build_sandbox(
+                    tmpdir,
+                    make_sandbox_config(
+                        nsjail_path="missing-nsjail",
+                        allow_local_fallback=True,
+                    ),
+                )
 
             self.assertIsInstance(sandbox, LocalSandbox)
             self.assertTrue(any("nsjail not found" in entry for entry in logs.output))

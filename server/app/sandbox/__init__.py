@@ -26,8 +26,14 @@ def build_sandbox(workspace_root: str, config: SandboxConfig) -> SandboxRunner:
     else:
         reason = f"platform '{current_platform}' is not Linux"
 
+    if not config.allow_local_fallback:
+        raise RuntimeError(
+            "Sandbox unavailable for this runtime. "
+            f"{reason}. Enable 'sandbox.allow_local_fallback' to use LocalSandbox."
+        )
+
     logger.warning(
-        "Falling back to LocalSandbox for workspace '%s': %s",
+        "UNSAFE_LOCAL_SANDBOX enabled for workspace '%s': %s",
         workspace_root,
         reason,
     )

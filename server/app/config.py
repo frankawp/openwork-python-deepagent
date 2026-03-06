@@ -33,6 +33,8 @@ class DataConfig:
 class SandboxConfig:
     enabled: bool
     nsjail_path: str
+    allow_local_fallback: bool
+    disable_clone_newns: bool
     rootfs_dir: str
     readonly_bind_mounts: list[str]
     mount_dev: bool
@@ -112,6 +114,8 @@ def load_config(path: str | None = None) -> AppConfig:
         sandbox=SandboxConfig(
             enabled=bool(sandbox_raw.get("enabled", True)),
             nsjail_path=str(sandbox_raw.get("nsjail_path", "nsjail")),
+            allow_local_fallback=bool(sandbox_raw.get("allow_local_fallback", False)),
+            disable_clone_newns=bool(sandbox_raw.get("disable_clone_newns", False)),
             rootfs_dir=str(sandbox_raw.get("rootfs_dir", ".sandbox-root")),
             readonly_bind_mounts=list(
                 sandbox_raw.get(

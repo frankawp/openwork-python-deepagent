@@ -47,7 +47,13 @@ class NsjailSandbox:
         command: str,
         env: dict[str, str],
         timeout_seconds: int,
+        *,
+        with_seccomp: bool = True,
     ) -> list[str]:
+        use_shared_mount_ns = self.config.disable_clone_newns
+        chroot_path = "/" if use_shared_mount_ns else str(self.rootfs_path)
+        cwd_path = str(self.workspace_root) if use_shared_mount_ns else "/workspace"
+
         args: list[str] = [
             self.nsjail_path,
             "--quiet",
@@ -58,9 +64,9 @@ class NsjailSandbox:
             "--group",
             str(os.getgid()),
             "--chroot",
-            str(self.rootfs_path),
+            chroot_path,
             "--cwd",
-            "/workspace",
+            cwd_path,
             "--time_limit",
             str(timeout_seconds),
             "--rlimit_cpu",
@@ -71,22 +77,25 @@ class NsjailSandbox:
             str(self.config.rlimit_fsize_mb * 1024 * 1024),
         ]
 
-        for mount in self.config.readonly_bind_mounts:
-            if not mount.startswith("/"):
-                continue
-            if not Path(mount).exists():
-                continue
-            args.extend(["--bindmount_ro", f"{mount}:{mount}"])
+        if self.config.disable_clone_newns:
+            args.append("--disable_clone_newns")
+        else:
+            for mount in self.config.readonly_bind_mounts:
+                if not mount.startswith("/"):
+                    continue
+                if not Path(mount).exists():
+                    continue
+                args.extend(["--bindmount_ro", f"{mount}:{mount}"])
 
-        if self.config.mount_dev and Path("/dev").exists():
-            args.extend(["--bindmount", "/dev:/dev"])
+            if self.config.mount_dev and Path("/dev").exists():
+                args.extend(["--bindmount", "/dev:/dev"])
 
-        if self.config.mount_proc and Path("/proc").exists():
-            args.extend(["--bindmount", "/proc:/proc"])
+            if self.config.mount_proc and Path("/proc").exists():
+                args.extend(["--bindmount", "/proc:/proc"])
 
-        args.extend(["--bindmount", f"{self.workspace_root}:/workspace"])
+            args.extend(["--bindmount", f"{self.workspace_root}:/workspace"])
 
-        if self.config.seccomp:
+        if with_seccomp and self.config.seccomp:
             args.extend(["--seccomp_string", self.config.seccomp])
 
         for key, value in env.items():
@@ -94,6 +103,16 @@ class NsjailSandbox:
 
         args.extend(["--", "/bin/sh", "-c", command])
         return args
+
+    @staticmethod
+    def _is_seccomp_compile_error(stderr: str) -> bool:
+        lowered = stderr.lower()
+        return "could not compile policy" in lowered or "couldn't prepare sandboxing policy" in lowered
+
+    @staticmethod
+    def _is_mount_permission_error(stderr: str) -> bool:
+        lowered = stderr.lower()
+        return "operation not permitted" in lowered and "buildmounttree" in lowered
 
     def run(
         self,
@@ -121,7 +140,7 @@ class NsjailSandbox:
         if "PATH" not in base_env:
             base_env["PATH"] = os.environ.get("PATH", "")
 
-        args = self._build_args(command, base_env, timeout)
+        args = self._build_args(command, base_env, timeout, with_seccomp=True)
 
         try:
             proc = subprocess.run(
@@ -143,12 +162,53 @@ class NsjailSandbox:
                 truncated=False,
             )
 
+        seccomp_fallback_used = False
+        if proc.returncode != 0 and self._is_seccomp_compile_error(proc.stderr or ""):
+            seccomp_fallback_used = True
+            args_without_seccomp = self._build_args(
+                command,
+                base_env,
+                timeout,
+                with_seccomp=False,
+            )
+            try:
+                proc = subprocess.run(
+                    args_without_seccomp,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+            except subprocess.TimeoutExpired:
+                return ExecuteResult(
+                    output=f"Error: Command timed out after {timeout} seconds.",
+                    exit_code=None,
+                    truncated=False,
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                return ExecuteResult(
+                    output=f"Error: Failed to run command. {exc}",
+                    exit_code=1,
+                    truncated=False,
+                )
+
         output = ""
+        if seccomp_fallback_used:
+            output += "[stderr] Warning: seccomp policy compile failed; retried without seccomp.\n"
         if proc.stdout:
             output += proc.stdout
         if proc.stderr:
             for line in proc.stderr.splitlines():
                 output += f"[stderr] {line}\n"
+
+        if proc.returncode != 0 and self._is_mount_permission_error(proc.stderr or ""):
+            output = (
+                "Error: nsjail is installed but cannot create mount namespaces in this runtime "
+                "(Operation not permitted).\n"
+                "This usually happens in unprivileged containers.\n"
+                "Fix options:\n"
+                "1) Run the server with container privileges/capabilities required by nsjail.\n"
+                "2) Set 'sandbox.allow_local_fallback: true' in config.yaml to use LocalSandbox.\n\n"
+            ) + output
 
         if not output.strip():
             output = "<no output>"
