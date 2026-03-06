@@ -12,6 +12,7 @@ dependencies = [
   "alembic>=1.13",
   "pymysql>=1.1",
   "pydantic>=2.6",
+  "email-validator>=2.0",
   "pyyaml>=6.0",
   "passlib>=1.7",
   "python-jose>=3.3",
