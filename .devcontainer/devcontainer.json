@@ -1,0 +1,32 @@
+{
+  "name": "openwork-linux-sandbox",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "NODE_VERSION": "20"
+    }
+  },
+  "runArgs": [
+    "--privileged",
+    "--cap-add=SYS_ADMIN",
+    "--security-opt=seccomp=unconfined"
+  ],
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "remoteUser": "vscode",
+  "overrideCommand": true,
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/workspaces/${localWorkspaceFolderBasename}/server/.venv/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  }
+}

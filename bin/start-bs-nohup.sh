@@ -17,6 +17,25 @@ BACKEND_PID_FILE="$RUN_DIR/backend.pid"
 FRONTEND_PID_FILE="$RUN_DIR/frontend.pid"
 BACKEND_LOG="$RUN_DIR/backend.log"
 FRONTEND_LOG="$RUN_DIR/frontend.log"
+BACKEND_PYTHON=""
+BACKEND_STARTED_THIS_RUN=0
+
+resolve_backend_python() {
+  local candidates=(
+    "$SERVER_DIR/.venv/bin/python"
+    "$SERVER_DIR/venv/bin/python"
+  )
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "$candidate" ]] && "$candidate" -c "import uvicorn" >/dev/null 2>&1; then
+      BACKEND_PYTHON="$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
 
 is_pid_running() {
   local pid="$1"
@@ -37,10 +56,32 @@ cleanup_stale_pid_file() {
   return 0
 }
 
+stop_backend_if_started_here() {
+  if [[ "$BACKEND_STARTED_THIS_RUN" -ne 1 ]]; then
+    return 0
+  fi
+  if [[ ! -f "$BACKEND_PID_FILE" ]]; then
+    return 0
+  fi
+  local pid
+  pid="$(cat "$BACKEND_PID_FILE" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && is_pid_running "$pid"; then
+    kill "$pid" >/dev/null 2>&1 || true
+    sleep 0.5
+    if is_pid_running "$pid"; then
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  fi
+  rm -f "$BACKEND_PID_FILE"
+  echo "Stopped backend due to frontend startup failure."
+}
+
 start_backend() {
-  if [[ ! -x "$SERVER_DIR/venv/bin/uvicorn" ]]; then
-    echo "Backend venv missing: $SERVER_DIR/venv/bin/uvicorn"
-    echo "Please set up backend dependencies first."
+  if ! resolve_backend_python; then
+    echo "No usable backend venv found under:"
+    echo "  - $SERVER_DIR/.venv/bin/python"
+    echo "  - $SERVER_DIR/venv/bin/python"
+    echo "Please set up backend dependencies first (for example: cd server && uv sync)."
     exit 1
   fi
 
@@ -51,7 +92,7 @@ start_backend() {
 
   (
     cd "$SERVER_DIR"
-    nohup ./venv/bin/uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" >"$BACKEND_LOG" 2>&1 &
+    nohup "$BACKEND_PYTHON" -m uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" >"$BACKEND_LOG" 2>&1 &
     echo $! >"$BACKEND_PID_FILE"
   )
 
@@ -63,7 +104,21 @@ start_backend() {
     tail -n 40 "$BACKEND_LOG" || true
     exit 1
   fi
+  BACKEND_STARTED_THIS_RUN=1
   echo "Backend started: PID $pid"
+}
+
+launch_frontend() {
+  (
+    cd "$WEB_DIR"
+    nohup npm run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT" >"$FRONTEND_LOG" 2>&1 &
+    echo $! >"$FRONTEND_PID_FILE"
+  )
+
+  sleep 1
+  local pid
+  pid="$(cat "$FRONTEND_PID_FILE")"
+  is_pid_running "$pid"
 }
 
 start_frontend() {
@@ -82,20 +137,29 @@ start_frontend() {
     return 0
   fi
 
-  (
-    cd "$WEB_DIR"
-    nohup npm run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT" >"$FRONTEND_LOG" 2>&1 &
-    echo $! >"$FRONTEND_PID_FILE"
-  )
-
-  sleep 1
+  if ! launch_frontend; then
+    if grep -q 'Host version ".*" does not match binary version ".*"' "$FRONTEND_LOG"; then
+      echo "Detected esbuild binary mismatch, running npm rebuild esbuild and retrying..."
+      (
+        cd "$WEB_DIR"
+        npm rebuild esbuild >>"$FRONTEND_LOG" 2>&1
+      )
+      rm -f "$FRONTEND_PID_FILE"
+      if ! launch_frontend; then
+        echo "Frontend failed to start after rebuild. Log: $FRONTEND_LOG"
+        tail -n 40 "$FRONTEND_LOG" || true
+        stop_backend_if_started_here
+        exit 1
+      fi
+    else
+      echo "Frontend failed to start. Log: $FRONTEND_LOG"
+      tail -n 40 "$FRONTEND_LOG" || true
+      stop_backend_if_started_here
+      exit 1
+    fi
+  fi
   local pid
   pid="$(cat "$FRONTEND_PID_FILE")"
-  if ! is_pid_running "$pid"; then
-    echo "Frontend failed to start. Log: $FRONTEND_LOG"
-    tail -n 40 "$FRONTEND_LOG" || true
-    exit 1
-  fi
   echo "Frontend started: PID $pid"
 }
 
