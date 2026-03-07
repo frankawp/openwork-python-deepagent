@@ -1,6 +1,6 @@
-# Dev Container for Linux Sandbox (nsjail)
+# Dev Container for Daytona Backend
 
-This dev container is intended for macOS/Windows hosts that need a Linux runtime to test `NsjailSandbox`.
+This dev container is intended for macOS/Windows hosts that need a Linux runtime to run the Openwork backend with Daytona.
 
 ## What it includes
 
@@ -8,17 +8,6 @@ This dev container is intended for macOS/Windows hosts that need a Linux runtime
 - Python 3 + venv tooling
 - Node.js 20 + npm/corepack
 - `uv` package manager
-- `nsjail` built from source
-
-## Required runtime flags
-
-The container runs with:
-
-- `--privileged`
-- `--cap-add=SYS_ADMIN`
-- `--security-opt=seccomp=unconfined`
-
-These are required for namespace/chroot/mount operations used by nsjail.
 
 ## First run
 
@@ -30,7 +19,12 @@ These are required for namespace/chroot/mount operations used by nsjail.
 
 In `server/config.yaml`:
 
-- Set `sandbox.allow_local_fallback: false` to enforce Linux nsjail behavior.
 - Keep `sandbox.enabled: true`.
 
-If nsjail is unavailable, server startup will fail instead of silently falling back to local execution.
+In `server/.env`, configure Daytona credentials:
+
+```bash
+DAYTONA_API_KEY=...
+DAYTONA_API_URL=https://app.daytona.io/api
+DAYTONA_TARGET=us
+```

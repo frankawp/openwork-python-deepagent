@@ -9,16 +9,7 @@ sudo apt-get update
 sudo apt-get install -y \
   python3 python3-venv python3-dev \
   build-essential pkg-config git curl \
-  autoconf bison flex gcc g++ libprotobuf-dev libnl-route-3-dev libtool protobuf-compiler \
   mysql-server
-
-printf "==> Build nsjail\n"
-if ! command -v nsjail >/dev/null 2>&1; then
-  git clone https://github.com/google/nsjail.git /tmp/nsjail
-  (cd /tmp/nsjail && make)
-  sudo ln -sf /tmp/nsjail/nsjail /usr/local/bin/nsjail
-fi
-nsjail --version || true
 
 printf "==> Install uv\n"
 if ! command -v uv >/dev/null 2>&1; then

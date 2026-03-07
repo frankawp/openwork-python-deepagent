@@ -1,213 +1,232 @@
 from __future__ import annotations
 
 import base64
-import json
-import os
-from pathlib import Path
-from typing import Any, AsyncGenerator
+import posixpath
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
-from watchfiles import awatch
 
-from ..checkpointer_mysql import MySQLSaver
 from ..config import load_config
+from ..daytona_backend import ensure_daytona_configured, get_or_create_daytona_backend
 from ..db import SessionLocal
 from ..deps import get_current_user
-from ..schemas import WorkspaceListOut, WorkspaceReadOut
 from ..models import Thread, User
+from ..schemas import WorkspaceListOut, WorkspaceReadOut
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
 
-def _workspace_root() -> Path:
-    cfg = load_config()
-    return Path(cfg.workspace.root).resolve()
-
-
-def _user_workspace(user: User) -> Path:
-    root = _workspace_root()
-    return (root / user.username).resolve()
-
-
-def _ensure_workspace(user: User) -> Path:
-    path = _user_workspace(user)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _safe_path(workspace: Path, rel_path: str) -> Path:
-    rel = rel_path.lstrip("/")
-    full = (workspace / rel).resolve()
-    if not str(full).startswith(str(workspace)):
-        raise HTTPException(status_code=403, detail="Access denied")
-    return full
-
-
-def _file_data_to_string(file_data: Any) -> str:
-    if isinstance(file_data, dict):
-        content = file_data.get("content")
-        if isinstance(content, list):
-            return "\n".join(str(line) for line in content)
-        if isinstance(content, str):
-            return content
-    if isinstance(file_data, list):
-        return "\n".join(str(line) for line in file_data)
-    if isinstance(file_data, str):
-        return file_data
-    return ""
-
-
-@router.get("")
-def get_workspace(user: User = Depends(get_current_user)):
-    path = _ensure_workspace(user)
-    return {"path": str(path)}
-
-
-@router.get("/files", response_model=WorkspaceListOut)
-def list_files(thread_id: str, user: User = Depends(get_current_user)):
-    workspace = _ensure_workspace(user)
-    files = []
-
-    for root, dirs, filenames in os.walk(workspace):
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d != "node_modules"]
-        for d in dirs:
-            rel = Path(root, d).relative_to(workspace)
-            files.append({"path": f"/{rel.as_posix()}", "is_dir": True})
-        for filename in filenames:
-            if filename.startswith("."):
-                continue
-            full = Path(root) / filename
-            rel = full.relative_to(workspace)
-            stat = full.stat()
-            files.append(
-                {
-                    "path": f"/{rel.as_posix()}",
-                    "is_dir": False,
-                    "size": stat.st_size,
-                    "modified_at": str(stat.st_mtime),
-                }
-            )
-
-    return {"success": True, "files": files, "workspacePath": str(workspace)}
-
-
-@router.get("/file", response_model=WorkspaceReadOut)
-def read_file(thread_id: str, path: str, user: User = Depends(get_current_user)):
-    workspace = _ensure_workspace(user)
-    full = _safe_path(workspace, path)
-    if full.is_dir():
-        return {"success": False, "error": "Cannot read directory"}
-
-    try:
-        content = full.read_text("utf-8")
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-    stat = full.stat()
-    return {
-        "success": True,
-        "content": content,
-        "size": stat.st_size,
-        "modified_at": str(stat.st_mtime),
-    }
-
-
-@router.get("/file-binary", response_model=WorkspaceReadOut)
-def read_file_binary(thread_id: str, path: str, user: User = Depends(get_current_user)):
-    workspace = _ensure_workspace(user)
-    full = _safe_path(workspace, path)
-    if full.is_dir():
-        return {"success": False, "error": "Cannot read directory"}
-
-    try:
-        data = full.read_bytes()
-        content = base64.b64encode(data).decode("utf-8")
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-    stat = full.stat()
-    return {
-        "success": True,
-        "content": content,
-        "size": stat.st_size,
-        "modified_at": str(stat.st_mtime),
-    }
-
-
-@router.post("/sync")
-def sync_to_disk(payload: dict, user: User = Depends(get_current_user)):
-    thread_id = payload.get("thread_id") or payload.get("threadId")
-    if not thread_id:
-        raise HTTPException(status_code=400, detail="thread_id is required")
-
+def _get_owned_thread(thread_id: str, user: User) -> Thread:
     db = SessionLocal()
     try:
         thread = db.get(Thread, thread_id)
         if not thread or thread.user_id != user.id:
             raise HTTPException(status_code=404, detail="Thread not found")
+        return thread
     finally:
         db.close()
 
-    workspace = _ensure_workspace(user)
-    checkpointer = MySQLSaver()
-    config = {"configurable": {"thread_id": thread_id}}
-    checkpoint_tuple = checkpointer.get_tuple(config)
 
-    if not checkpoint_tuple:
-        return {"success": True, "written": 0, "errors": [], "message": "No checkpoint"}
+def _get_daytona_context(thread_id: str):
+    cfg = load_config()
+    ensure_daytona_configured()
+    return get_or_create_daytona_backend(
+        thread_id=thread_id,
+        command_timeout_seconds=cfg.sandbox.time_limit_sec,
+    )
 
-    checkpoint = checkpoint_tuple.checkpoint or {}
-    files = None
 
-    if isinstance(checkpoint, dict):
-        channel_values = checkpoint.get("channel_values")
-        if isinstance(channel_values, dict):
-            files = channel_values.get("files")
-        if files is None:
-            files = checkpoint.get("files")
+def _normalize_root(workspace_root: str) -> str:
+    normalized = posixpath.normpath(workspace_root or "/")
+    return normalized if normalized.startswith("/") else f"/{normalized}"
 
-    if not isinstance(files, dict):
-        return {"success": True, "written": 0, "errors": [], "message": "No files to sync"}
 
-    written = 0
-    errors: list[dict[str, str]] = []
+def _is_within_root(workspace_root: str, candidate_path: str) -> bool:
+    root = _normalize_root(workspace_root)
+    candidate = posixpath.normpath(candidate_path)
+    if not candidate.startswith("/"):
+        candidate = f"/{candidate}"
+    if root == "/":
+        return True
+    return candidate == root or candidate.startswith(f"{root}/")
 
-    for path, file_data in files.items():
-        if not isinstance(path, str):
-            continue
-        if path in ("", "/"):
-            continue
 
-        try:
-            full = _safe_path(workspace, path)
-            if path.endswith("/"):
-                full.mkdir(parents=True, exist_ok=True)
+def _safe_sandbox_path(workspace_root: str, path: str) -> str:
+    root = _normalize_root(workspace_root)
+    raw = (path or "").strip()
+    if not raw or raw == "/":
+        return root
+
+    if raw.startswith(root):
+        candidate = posixpath.normpath(raw)
+    elif raw.startswith("/"):
+        candidate = posixpath.normpath(posixpath.join(root, raw.lstrip("/")))
+    else:
+        candidate = posixpath.normpath(posixpath.join(root, raw))
+
+    if not candidate.startswith("/"):
+        candidate = f"/{candidate}"
+
+    if not _is_within_root(root, candidate):
+        raise HTTPException(status_code=403, detail="Access denied")
+    return candidate
+
+
+def _to_relative_path(workspace_root: str, full_path: str) -> str:
+    root = _normalize_root(workspace_root)
+    normalized = posixpath.normpath(full_path)
+    if normalized == root:
+        return "/"
+    rel = posixpath.relpath(normalized, root)
+    if rel == ".":
+        return "/"
+    return f"/{rel.lstrip('/')}"
+
+
+def _is_hidden_or_ignored(path: str) -> bool:
+    parts = [p for p in path.split("/") if p]
+    for part in parts:
+        if part.startswith(".") or part == "node_modules":
+            return True
+    return False
+
+
+def _list_workspace_files(backend: Any, workspace_root: str) -> list[dict[str, Any]]:
+    files: list[dict[str, Any]] = []
+    queue = [_normalize_root(workspace_root)]
+
+    while queue:
+        current_dir = queue.pop(0)
+        for entry in backend.ls_info(current_dir):
+            entry_path = entry.get("path") if isinstance(entry, dict) else None
+            if not isinstance(entry_path, str):
                 continue
-            full.parent.mkdir(parents=True, exist_ok=True)
-            content = _file_data_to_string(file_data)
-            full.write_text(content, "utf-8")
-            written += 1
-        except Exception as e:
-            errors.append({"path": str(path), "error": str(e)})
 
-    return {"success": len(errors) == 0, "written": written, "errors": errors}
+            normalized = posixpath.normpath(entry_path)
+            if not normalized.startswith("/"):
+                normalized = f"/{normalized}"
 
-
-async def _watch_workspace(workspace: Path, thread_id: str) -> AsyncGenerator[str, None]:
-    async for changes in awatch(workspace):
-        for _change, path in changes:
-            if "/." in path or "/node_modules/" in path:
+            if not _is_within_root(workspace_root, normalized):
                 continue
-        payload = {
-            "type": "files-changed",
-            "threadId": thread_id,
-            "workspacePath": str(workspace),
-        }
-        yield f"data: {json.dumps(payload)}\n\n"
+
+            rel_path = _to_relative_path(workspace_root, normalized)
+            if rel_path == "/" or _is_hidden_or_ignored(rel_path):
+                continue
+
+            is_dir = bool(entry.get("is_dir")) if isinstance(entry, dict) else False
+            item: dict[str, Any] = {
+                "path": rel_path,
+                "is_dir": is_dir,
+            }
+            if isinstance(entry, dict):
+                size = entry.get("size")
+                modified_at = entry.get("modified_at")
+                if isinstance(size, int):
+                    item["size"] = size
+                if isinstance(modified_at, str):
+                    item["modified_at"] = modified_at
+            files.append(item)
+
+            if is_dir:
+                queue.append(normalized)
+
+    files.sort(key=lambda x: x.get("path", ""))
+    return files
 
 
-@router.get("/changes")
-def watch_changes(thread_id: str, user: User = Depends(get_current_user)):
-    workspace = _ensure_workspace(user)
-    return StreamingResponse(_watch_workspace(workspace, thread_id), media_type="text/event-stream")
+def _download_file_bytes(backend: Any, full_path: str) -> bytes:
+    responses = backend.download_files([full_path])
+    if not responses:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    first = responses[0]
+    error = getattr(first, "error", None)
+    if error:
+        if error in {"file_not_found", "invalid_path"}:
+            raise HTTPException(status_code=404, detail="File not found")
+        if error == "permission_denied":
+            raise HTTPException(status_code=403, detail="Access denied")
+        if error == "is_directory":
+            raise HTTPException(status_code=400, detail="Cannot read directory")
+        raise HTTPException(status_code=400, detail=str(error))
+
+    content = getattr(first, "content", None)
+    if content is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    if not isinstance(content, (bytes, bytearray)):
+        raise HTTPException(status_code=500, detail="Unexpected file content type")
+    return bytes(content)
+
+
+@router.get("")
+def get_workspace(thread_id: str, user: User = Depends(get_current_user)):
+    _get_owned_thread(thread_id, user)
+    daytona_context = _get_daytona_context(thread_id)
+    return {"path": _normalize_root(daytona_context.workspace_root)}
+
+
+@router.get("/files", response_model=WorkspaceListOut)
+def list_files(thread_id: str, user: User = Depends(get_current_user)):
+    _get_owned_thread(thread_id, user)
+    daytona_context = _get_daytona_context(thread_id)
+    files = _list_workspace_files(daytona_context.backend, daytona_context.workspace_root)
+    return {
+        "success": True,
+        "files": files,
+        "workspacePath": _normalize_root(daytona_context.workspace_root),
+    }
+
+
+@router.get("/file", response_model=WorkspaceReadOut)
+def read_file(thread_id: str, path: str, user: User = Depends(get_current_user)):
+    _get_owned_thread(thread_id, user)
+    daytona_context = _get_daytona_context(thread_id)
+
+    full_path = _safe_sandbox_path(daytona_context.workspace_root, path)
+    try:
+        data = _download_file_bytes(daytona_context.backend, full_path)
+        content = data.decode("utf-8")
+    except HTTPException:
+        raise
+    except UnicodeDecodeError:
+        return {"success": False, "error": "File is not valid UTF-8 text"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+    return {
+        "success": True,
+        "content": content,
+        "size": len(data),
+    }
+
+
+@router.get("/file-binary", response_model=WorkspaceReadOut)
+def read_file_binary(thread_id: str, path: str, user: User = Depends(get_current_user)):
+    _get_owned_thread(thread_id, user)
+    daytona_context = _get_daytona_context(thread_id)
+
+    full_path = _safe_sandbox_path(daytona_context.workspace_root, path)
+    try:
+        data = _download_file_bytes(daytona_context.backend, full_path)
+        content = base64.b64encode(data).decode("utf-8")
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+    return {
+        "success": True,
+        "content": content,
+        "size": len(data),
+    }
+
+
+@router.post("/sync")
+def sync_to_disk(_payload: dict, _user: User = Depends(get_current_user)):
+    # Deprecated: local disk sync is intentionally disabled for Daytona-only backend.
+    return {
+        "success": False,
+        "written": 0,
+        "errors": [{"path": "/", "error": "Local sync is disabled"}],
+        "message": "Workspace files are stored in Daytona sandbox",
+    }

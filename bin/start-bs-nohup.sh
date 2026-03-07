@@ -5,6 +5,20 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVER_DIR="$ROOT_DIR/server"
 WEB_DIR="$ROOT_DIR/web"
 
+load_env_file() {
+  local env_file="$1"
+  if [[ ! -f "$env_file" ]]; then
+    return 0
+  fi
+
+  set -a
+  # shellcheck disable=SC1090
+  source "$env_file"
+  set +a
+}
+
+load_env_file "$SERVER_DIR/.env"
+
 BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_HOST="${FRONTEND_HOST:-0.0.0.0}"
@@ -23,7 +37,6 @@ BACKEND_STARTED_THIS_RUN=0
 resolve_backend_python() {
   local candidates=(
     "$SERVER_DIR/.venv/bin/python"
-    "$SERVER_DIR/venv/bin/python"
   )
 
   local candidate
@@ -80,7 +93,6 @@ start_backend() {
   if ! resolve_backend_python; then
     echo "No usable backend venv found under:"
     echo "  - $SERVER_DIR/.venv/bin/python"
-    echo "  - $SERVER_DIR/venv/bin/python"
     echo "Please set up backend dependencies first (for example: cd server && uv sync)."
     exit 1
   fi

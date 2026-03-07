@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import uuid
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends
@@ -10,10 +9,11 @@ from fastapi.responses import StreamingResponse
 from langchain_core.load.dump import dumpd
 from langgraph.types import Command
 
-from pathlib import Path
-
-from ..config import load_config
-from ..deep_agent_runtime import create_runtime
+from ..deep_agent_runtime import (
+    DEEPSEEK_CHAT_MODEL_ID,
+    create_runtime,
+    should_fallback_to_deepseek_chat,
+)
 from ..deps import get_current_user
 from ..models import User
 from ..schemas import AgentInterruptRequest, AgentStreamRequest
@@ -92,77 +92,100 @@ async def _stream_sse(stream) -> AsyncGenerator[str, None]:
             )
 
 
-async def _agent_stream(
-    payload: AgentStreamRequest, workspace_path: str, username: str
-) -> AsyncGenerator[str, None]:
-    msg_id = str(uuid.uuid4())
-    try:
-        agent = create_runtime(
-            thread_id=payload.thread_id,
-            workspace_path=workspace_path,
-            username=username,
-            model_id=payload.model_id,
-            skills_enabled=payload.skills_enabled,
-        )
+async def _agent_stream(payload: AgentStreamRequest) -> AsyncGenerator[str, None]:
+    model_candidates = [payload.model_id]
+    if should_fallback_to_deepseek_chat(payload.model_id):
+        model_candidates.append(DEEPSEEK_CHAT_MODEL_ID)
 
-        config = {"configurable": {"thread_id": payload.thread_id}}
+    last_error: Exception | None = None
+    for index, model_id in enumerate(model_candidates):
+        emitted_any = False
+        try:
+            agent = create_runtime(
+                thread_id=payload.thread_id,
+                model_id=model_id,
+            )
 
-        if payload.command and payload.command.get("resume") is not None:
-            resume = _normalize_resume(payload.command.get("resume"))
+            config = {"configurable": {"thread_id": payload.thread_id}}
+
+            if payload.command and payload.command.get("resume") is not None:
+                resume = _normalize_resume(payload.command.get("resume"))
+                command = Command(resume=resume)
+                stream = agent.astream(
+                    command,
+                    config,
+                    stream_mode=["messages", "values", "updates"],
+                )
+            else:
+                stream = agent.astream(
+                    {"messages": [{"role": "user", "content": payload.message}]},
+                    config,
+                    stream_mode=["messages", "values", "updates"],
+                )
+
+            async for chunk in _stream_sse(stream):
+                emitted_any = True
+                yield chunk
+
+            yield _serialize_sse({"type": "done"})
+            return
+        except Exception as e:
+            last_error = e
+            is_primary_attempt = index == 0
+            has_fallback = len(model_candidates) > 1
+            if is_primary_attempt and has_fallback and not emitted_any:
+                continue
+            message = str(last_error) or repr(last_error)
+            yield _serialize_sse({"type": "error", "error": message})
+            return
+
+
+async def _agent_interrupt(payload: AgentInterruptRequest) -> AsyncGenerator[str, None]:
+    model_candidates = [payload.model_id]
+    if should_fallback_to_deepseek_chat(payload.model_id):
+        model_candidates.append(DEEPSEEK_CHAT_MODEL_ID)
+
+    last_error: Exception | None = None
+    for index, model_id in enumerate(model_candidates):
+        emitted_any = False
+        try:
+            agent = create_runtime(
+                thread_id=payload.thread_id,
+                model_id=model_id,
+            )
+            config = {"configurable": {"thread_id": payload.thread_id}}
+            resume = _normalize_resume(payload.decision)
             command = Command(resume=resume)
-            stream = agent.astream(command, config, stream_mode=["messages", "values", "updates"])
-        else:
             stream = agent.astream(
-                {"messages": [{"role": "user", "content": payload.message}]},
+                command,
                 config,
                 stream_mode=["messages", "values", "updates"],
             )
 
-        async for chunk in _stream_sse(stream):
-            yield chunk
+            async for chunk in _stream_sse(stream):
+                emitted_any = True
+                yield chunk
 
-        yield _serialize_sse({"type": "done"})
-    except Exception as e:
-        message = str(e) or repr(e)
-        yield _serialize_sse({"type": "error", "error": message})
-
-
-async def _agent_interrupt(
-    payload: AgentInterruptRequest, workspace_path: str, username: str
-) -> AsyncGenerator[str, None]:
-    try:
-        agent = create_runtime(
-            thread_id=payload.thread_id,
-            workspace_path=workspace_path,
-            username=username,
-            model_id=payload.model_id,
-            skills_enabled=payload.skills_enabled,
-        )
-        config = {"configurable": {"thread_id": payload.thread_id}}
-        resume = _normalize_resume(payload.decision)
-        command = Command(resume=resume)
-        stream = agent.astream(command, config, stream_mode=["messages", "values", "updates"])
-
-        async for chunk in _stream_sse(stream):
-            yield chunk
-
-        yield _serialize_sse({"type": "done"})
-    except Exception as e:
-        message = str(e) or repr(e)
-        yield _serialize_sse({"type": "error", "error": message})
+            yield _serialize_sse({"type": "done"})
+            return
+        except Exception as e:
+            last_error = e
+            is_primary_attempt = index == 0
+            has_fallback = len(model_candidates) > 1
+            if is_primary_attempt and has_fallback and not emitted_any:
+                continue
+            message = str(last_error) or repr(last_error)
+            yield _serialize_sse({"type": "error", "error": message})
+            return
 
 
 @router.post("/stream")
 def stream_agent(payload: AgentStreamRequest, _user: User = Depends(get_current_user)):
-    cfg = load_config()
-    workspace_path = str(Path(cfg.workspace.root) / _user.username)
-    generator = _agent_stream(payload, workspace_path, _user.username)
+    generator = _agent_stream(payload)
     return StreamingResponse(generator, media_type="text/event-stream")
 
 
 @router.post("/interrupt")
 def interrupt_agent(payload: AgentInterruptRequest, _user: User = Depends(get_current_user)):
-    cfg = load_config()
-    workspace_path = str(Path(cfg.workspace.root) / _user.username)
-    generator = _agent_interrupt(payload, workspace_path, _user.username)
+    generator = _agent_interrupt(payload)
     return StreamingResponse(generator, media_type="text/event-stream")

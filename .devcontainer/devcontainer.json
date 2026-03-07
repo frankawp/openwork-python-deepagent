@@ -1,5 +1,5 @@
 {
-  "name": "openwork-linux-sandbox",
+  "name": "openwork-daytona-dev",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "..",
@@ -7,11 +7,6 @@
       "NODE_VERSION": "20"
     }
   },
-  "runArgs": [
-    "--privileged",
-    "--cap-add=SYS_ADMIN",
-    "--security-opt=seccomp=unconfined"
-  ],
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "remoteUser": "vscode",
   "overrideCommand": true,

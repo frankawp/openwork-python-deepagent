@@ -2,21 +2,35 @@ from __future__ import annotations
 
 import base64
 import dataclasses
-import enum
 import datetime as dt
+import enum
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from ..analysis_env import ensure_analysis_workspace_layout
+from ..config import load_config
+from ..daytona_backend import (
+    delete_daytona_sandbox_for_thread,
+    ensure_daytona_configured,
+    ensure_daytona_thread_environment,
+)
 from ..deps import get_db, get_current_user
 from langchain_core.messages.base import BaseMessage
 
 from ..checkpointer_mysql import MySQLSaver
 from ..models import Thread, User
 from ..schemas import ThreadCreate, ThreadOut, ThreadUpdate
+from ..workspace_paths import user_workspace_path
 
 router = APIRouter(prefix="/threads", tags=["threads"])
+
+
+def _ensure_workspace_layout(username: str) -> str:
+    workspace = user_workspace_path(username, create=True)
+    ensure_analysis_workspace_layout(str(workspace))
+    return str(workspace)
 
 
 def _to_out(thread: Thread) -> ThreadOut:
@@ -110,6 +124,21 @@ def create_thread(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    cfg = load_config()
+    try:
+        _ensure_workspace_layout(user.username)
+        ensure_daytona_configured()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initialize session environment: {e}",
+        ) from e
+
     now = dt.datetime.utcnow()
     title = payload.title or f"Thread {now.date().isoformat()}"
     thread = Thread(
@@ -124,6 +153,22 @@ def create_thread(
     db.add(thread)
     db.commit()
     db.refresh(thread)
+
+    try:
+        ensure_daytona_thread_environment(
+            thread_id=thread.id,
+            command_timeout_seconds=cfg.sandbox.time_limit_sec,
+        )
+    except Exception as e:
+        # Avoid keeping a half-initialized thread when remote sandbox prep fails.
+        delete_daytona_sandbox_for_thread(thread.id)
+        db.delete(thread)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initialize Daytona environment: {e}",
+        ) from e
+
     return _to_out(thread)
 
 
@@ -162,6 +207,8 @@ def delete_thread(
     thread = db.get(Thread, thread_id)
     if not thread or thread.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+
+    delete_daytona_sandbox_for_thread(thread_id)
 
     db.delete(thread)
     db.commit()

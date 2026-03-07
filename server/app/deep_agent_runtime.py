@@ -6,19 +6,21 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 
 from deepagents import create_deep_agent
-from deepagents.backends import FilesystemBackend
 
-from .agent_tools import make_execute_tool
-from .analysis_env import ensure_analysis_environment
 from .config import load_config
 from .checkpointer_mysql import MySQLSaver
 from .crypto import decrypt
 from .db import SessionLocal
+from .daytona_backend import (
+    ensure_daytona_configured,
+    get_or_create_daytona_backend,
+)
 from .model_catalog import DEFAULT_MODEL_ID, MODELS
 from .models import AppSetting, GlobalApiKey
-from .sandbox import build_sandbox
-from .skills import get_workspace_skills_path, init_workspace_skills
 from .system_prompt import build_system_prompt
+
+DEEPSEEK_CHAT_MODEL_ID = "deepseek-chat"
+DEEPSEEK_REASONER_MODEL_ID = "deepseek-reasoner"
 
 
 def _get_api_key(provider: str) -> str | None:
@@ -49,27 +51,37 @@ def _resolve_model(model_id: str | None) -> tuple[str, str]:
     return "deepseek", model_id
 
 
-def _get_model_instance(model_id: str | None) -> BaseChatModel:
+def resolve_runtime_model(model_id: str | None) -> tuple[str, str]:
     provider, model_name = _resolve_model(model_id)
 
     if provider != "deepseek" and not _get_api_key(provider) and _get_api_key("deepseek"):
         provider = "deepseek"
-        model_name = "deepseek-chat"
+        model_name = DEEPSEEK_CHAT_MODEL_ID
+
+    return provider, model_name
+
+
+def should_fallback_to_deepseek_chat(model_id: str | None) -> bool:
+    provider, model_name = resolve_runtime_model(model_id)
+    return provider == "deepseek" and model_name == DEEPSEEK_REASONER_MODEL_ID
+
+
+def _get_model_instance(model_id: str | None) -> BaseChatModel:
+    provider, model_name = resolve_runtime_model(model_id)
 
     if provider == "deepseek":
         api_key = _get_api_key("deepseek")
         if not api_key:
             raise RuntimeError("DeepSeek API key not configured")
         try:
-            from langchain_openai import ChatOpenAI
+            from langchain_deepseek import ChatDeepSeek
         except Exception as e:
             raise RuntimeError(
-                "langchain-openai is required for DeepSeek. Install it in the server venv."
+                "langchain-deepseek is required for DeepSeek. Install it in the server venv."
             ) from e
-        return ChatOpenAI(
+        return ChatDeepSeek(
             model=model_name,
             api_key=api_key,
-            base_url="https://api.deepseek.com",
         )
 
     if provider == "openai":
@@ -101,45 +113,25 @@ def _get_model_instance(model_id: str | None) -> BaseChatModel:
 
 def create_runtime(
     thread_id: str,
-    workspace_path: str,
-    username: str,
     model_id: str | None = None,
-    skills_enabled: bool = True,
 ) -> Any:
     model = _get_model_instance(model_id)
     checkpointer = MySQLSaver()
-    backend = FilesystemBackend(root_dir=workspace_path, virtual_mode=True)
     cfg = load_config()
 
-    sandbox = build_sandbox(workspace_path, cfg.sandbox)
-
-    ensure_analysis_environment(
-        workspace_path,
-        sandbox,
-        timeout_seconds=cfg.sandbox.time_limit_sec,
-        max_output_bytes=cfg.sandbox.max_output_bytes,
+    ensure_daytona_configured()
+    daytona_context = get_or_create_daytona_backend(
+        thread_id=thread_id,
+        command_timeout_seconds=cfg.sandbox.time_limit_sec,
     )
+    backend = daytona_context.backend
 
-    init_workspace_skills(workspace_path)
-
-    # 构建 skills 路径（用户级别）
     skills_paths: list[str] = []
-    if skills_enabled:
-        skills_path = get_workspace_skills_path(workspace_path)
-        if skills_path:
-            skills_paths.append(str(skills_path))
-
-    system_prompt = build_system_prompt(workspace_path)
-    execute_tool = make_execute_tool(
-        workspace_path,
-        sandbox,
-        timeout_seconds=cfg.sandbox.time_limit_sec,
-        max_output_bytes=cfg.sandbox.max_output_bytes,
-    )
+    system_prompt = build_system_prompt(daytona_context.workspace_root)
 
     agent = create_deep_agent(
         model=model,
-        tools=[execute_tool],
+        tools=[],
         skills=skills_paths,
         system_prompt=SystemMessage(content=system_prompt),
         backend=backend,

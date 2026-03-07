@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from .config import load_config
+from .workspace_paths import user_workspace_path
 
 # 示例技能内容
 EXAMPLE_SKILL = """---
@@ -111,8 +111,7 @@ def init_user_skills(username: str) -> Path:
     Returns:
         skills 目录的 Path 对象
     """
-    cfg = load_config()
-    workspace_root = Path(cfg.workspace.root) / username
+    workspace_root = user_workspace_path(username, create=True)
     return init_workspace_skills(str(workspace_root))
 
 

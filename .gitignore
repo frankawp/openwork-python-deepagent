@@ -8,3 +8,5 @@ release
 __pycache__/
 *.pyc
 server/uv.lock
+.env
+server/.env

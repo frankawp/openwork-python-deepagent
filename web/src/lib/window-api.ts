@@ -188,8 +188,15 @@ export function attachWindowApi() {
       deleteApiKey: (provider: string) => apiFetch(`/models/api-key/${provider}`, { method: "DELETE" })
     },
     workspace: {
-      get: (_threadId?: string) => apiFetch("/workspace").then((res: any) => res.path ?? null),
-      select: (_threadId?: string) => apiFetch("/workspace").then((res: any) => res.path ?? null),
+      get: (threadId?: string) => {
+        if (!threadId) return Promise.resolve(null)
+        return apiFetch(`/workspace?thread_id=${threadId}`).then((res: any) => res.path ?? null)
+      },
+      // Backward-compatible alias: workspace selection is disabled for Daytona sandbox.
+      select: (threadId?: string) => {
+        if (!threadId) return Promise.resolve(null)
+        return apiFetch(`/workspace?thread_id=${threadId}`).then((res: any) => res.path ?? null)
+      },
       loadFromDisk: (threadId: string) => apiFetch(`/workspace/files?thread_id=${threadId}`),
       readFile: (threadId: string, filePath: string) =>
         apiFetch(`/workspace/file?thread_id=${threadId}&path=${encodeURIComponent(filePath)}`),
@@ -201,28 +208,8 @@ export function attachWindowApi() {
           body: JSON.stringify({ thread_id: threadId })
         }),
       onFilesChanged: (callback: (data: { threadId: string; workspacePath: string }) => void) => {
-        const threadId = "default"
-        const source = new EventSource(`${API_BASE}/workspace/changes?thread_id=${threadId}`, {
-          withCredentials: true
-        })
-        source.onmessage = (event) => {
-          try {
-            const payload = JSON.parse(event.data) as { threadId?: string; workspacePath?: string }
-            if (payload.workspacePath) {
-              callback({
-                threadId: payload.threadId || threadId,
-                workspacePath: payload.workspacePath
-              })
-              return
-            }
-          } catch {
-            // fallback
-          }
-          apiFetch("/workspace").then((data: { path: string }) => {
-            callback({ threadId, workspacePath: data.path })
-          })
-        }
-        return () => source.close()
+        void callback
+        return () => {}
       }
     }
   }

@@ -10,10 +10,8 @@ import {
   Clock,
   XCircle,
   GripHorizontal,
-  Download,
-  FolderSync,
+  RefreshCw,
   Loader2,
-  Check,
   Folder,
   FolderOpen,
   File,
@@ -515,8 +513,7 @@ function FilesContent(): React.JSX.Element {
   const workspacePath = threadState?.workspacePath ?? null
   const setWorkspacePath = threadState?.setWorkspacePath
   const setWorkspaceFiles = threadState?.setWorkspaceFiles
-  const [syncing, setSyncing] = useState(false)
-  const [syncSuccess, setSyncSuccess] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Load workspace path and files for current thread
   useEffect(() => {
@@ -538,113 +535,47 @@ function FilesContent(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentThreadId])
 
-  // Listen for file changes from the workspace watcher
-  useEffect(() => {
-    if (!currentThreadId || !setWorkspaceFiles) return
-
-    const cleanup = window.api.workspace.onFilesChanged(async (data) => {
-      // Only reload if the event is for the current thread
-      if (data.threadId === currentThreadId) {
-        console.log("[FilesContent] Files changed, reloading...", data)
-        const result = await window.api.workspace.loadFromDisk(currentThreadId)
-        if (result.success && result.files) {
-          setWorkspaceFiles(result.files)
-        }
-      }
-    })
-
-    return cleanup
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentThreadId])
-
-  // Handle selecting a workspace folder
-  async function handleSelectFolder(): Promise<void> {
-    if (!currentThreadId || !setWorkspacePath || !setWorkspaceFiles) return
-    setSyncing(true)
+  async function handleRefresh(): Promise<void> {
+    if (!currentThreadId || !setWorkspaceFiles || !setWorkspacePath) return
+    setRefreshing(true)
     try {
-      const path = await window.api.workspace.select(currentThreadId)
-      if (path) {
-        setWorkspacePath(path)
-        // Load files from the newly selected folder
-        const result = await window.api.workspace.loadFromDisk(currentThreadId)
-        if (result.success && result.files) {
-          setWorkspaceFiles(result.files)
-        }
+      const path = await window.api.workspace.get(currentThreadId)
+      setWorkspacePath(path)
+      const result = await window.api.workspace.loadFromDisk(currentThreadId)
+      if (result.success && result.files) {
+        setWorkspaceFiles(result.files)
       }
     } catch (e) {
-      console.error("[FilesContent] Select folder error:", e)
+      console.error("[FilesContent] Refresh failed:", e)
     } finally {
-      setSyncing(false)
-    }
-  }
-
-  // Handle sync to disk
-  // TODO: Implement syncToDisk API in main process
-  async function handleSyncToDisk(): Promise<void> {
-    if (!currentThreadId) return
-
-    // If no files, just select a folder
-    if (workspaceFiles.length === 0) {
-      await handleSelectFolder()
-      return
-    }
-
-    setSyncing(true)
-    try {
-      const result = await window.api.workspace.syncToDisk(currentThreadId)
-      if (result?.success) {
-        setSyncSuccess(true)
-        setTimeout(() => setSyncSuccess(false), 1500)
-      }
-      const refreshed = await window.api.workspace.loadFromDisk(currentThreadId)
-      if (refreshed.success && refreshed.files) {
-        setWorkspaceFiles?.(refreshed.files)
-      }
-    } catch (e) {
-      console.error("[FilesContent] syncToDisk failed:", e)
-    } finally {
-      setSyncing(false)
+      setRefreshing(false)
     }
   }
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header with sync button */}
+      {/* Header with refresh button */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-background/30">
         <span
           className="text-[10px] text-muted-foreground truncate flex-1"
           title={workspacePath || undefined}
         >
-          {workspacePath ? workspacePath.split("/").pop() : "No folder linked"}
+          {workspacePath || "No sandbox workspace"}
         </span>
         <Button
           variant="ghost"
           size="sm"
-          onClick={workspaceFiles.length > 0 ? handleSyncToDisk : handleSelectFolder}
-          disabled={syncing || !currentThreadId}
+          onClick={handleRefresh}
+          disabled={refreshing || !currentThreadId}
           className="h-5 px-1.5 text-[10px]"
-          title={
-            workspaceFiles.length > 0
-              ? workspacePath
-                ? `Sync to ${workspacePath}`
-                : "Sync files to disk"
-              : workspacePath
-                ? `Change folder`
-                : "Link sync folder"
-          }
+          title="Refresh sandbox files"
         >
-          {syncing ? (
+          {refreshing ? (
             <Loader2 className="size-3 animate-spin" />
-          ) : syncSuccess ? (
-            <Check className="size-3 text-status-nominal" />
-          ) : workspaceFiles.length > 0 ? (
-            <Download className="size-3" />
           ) : (
-            <FolderSync className="size-3" />
+            <RefreshCw className="size-3" />
           )}
-          <span className="ml-1">
-            {workspaceFiles.length > 0 ? "Sync" : workspacePath ? "Change" : "Link"}
-          </span>
+          <span className="ml-1">Refresh</span>
         </Button>
       </div>
 
@@ -653,11 +584,7 @@ function FilesContent(): React.JSX.Element {
         <div className="flex flex-col items-center justify-center text-center text-sm text-muted-foreground py-8 px-4 flex-1">
           <FolderTree className="size-8 mb-2 opacity-50" />
           <span>No workspace files</span>
-          <span className="text-xs mt-1">
-            {workspacePath
-              ? `Linked to ${workspacePath.split("/").pop()}`
-              : 'Click "Link" to set a sync folder'}
-          </span>
+          <span className="text-xs mt-1">Files will appear from the Daytona sandbox workspace</span>
         </div>
       ) : (
         <div className="py-1 overflow-auto flex-1">

@@ -74,7 +74,7 @@ When the user requests data analysis (CSV, metrics, reports, A/B tests, experime
 - glob: Find files by pattern (e.g., "**/*.py")
 - grep: Search file contents
 
-All file paths should be **virtual absolute paths** rooted at `/` inside your workspace.
+All file paths should follow the runtime-specific path rules from the "File System and Paths" section above.
 
 ### Shell Tool
 - execute: Run shell commands in the workspace directory
@@ -93,8 +93,7 @@ The execute tool runs commands inside a sandbox with the workspace mounted. Use 
 - When running non-trivial commands, briefly explain what they do
 
 ### Python Environment
-- Always use `/.venv/bin/python` for Python execution
-- Use `/.venv/bin/uv` for dependency installation
+- Use the runtime-specific Python and `uv` paths from the "File System and Paths" section above.
 
 ## Code References
 When referencing code, use format: `file_path:line_number`
@@ -132,11 +131,23 @@ The todo list is a planning tool - use it judiciously to avoid overwhelming the 
 
 
 def build_system_prompt(workspace_root: str) -> str:
+    path_rules = (
+        f"- The writable workspace root is: `{workspace_root}`\n"
+        f"- Use real absolute paths under this root. Example: `{workspace_root}/src/index.ts`.\n"
+        f"- If another instruction mentions `/analysis`, treat it as `{workspace_root}/analysis`.\n"
+        "- Do not write directly under `/`; treat it as system root.\n"
+    )
+    python_rules = (
+        "- Use `python3` for Python execution.\n"
+        "- Use `uv` for dependency installation.\n"
+        f"- If needed, create project venv under `{workspace_root}/.venv`.\n"
+    )
+
     workspace_section = (
         "### File System and Paths\n\n"
         "**IMPORTANT - Path Handling:**\n"
-        f"- The workspace root is: `{workspace_root}`\n"
-        "- Use virtual absolute paths that start with `/` and are relative to the workspace root.\n"
-        "- Example: `/src/index.ts`, `/README.md`\n"
+        f"{path_rules}\n"
+        "### Python Environment\n"
+        f"{python_rules}"
     )
     return workspace_section + "\n\n" + BASE_SYSTEM_PROMPT
