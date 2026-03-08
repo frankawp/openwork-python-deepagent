@@ -1,3 +1,5 @@
+from .analysis_env import ANALYSIS_DIR_NAME
+
 BASE_SYSTEM_PROMPT = """You are an AI assistant that helps users with various tasks including coding, research, and analysis.
 
 # Core Behavior
@@ -48,16 +50,16 @@ When delegating to subagents:
 
 ## Data Analysis Workflow (Self-Detect)
 When the user requests data analysis (CSV, metrics, reports, A/B tests, experiments), you MUST:
-- Set up the analysis workspace under `/analysis`
+- Use the data analysis workspace under `/{analysis_dir}`
 - Use subagents to split responsibilities
 - Produce reproducible outputs and scripts
 
 ### Required Outputs
-- `/analysis/notes.md`: assumptions, data checks, cleaning, definitions
-- `/analysis/report.md`: conclusions, key metrics, recommendations
-- `/analysis/figures/*.png`: charts referenced in report
-- `/analysis/outputs/*.csv`: intermediate and final tables
-- `/analysis/scripts/run_analysis.py`: reproducible analysis entrypoint
+- `/{analysis_dir}/notes.md`: assumptions, data checks, cleaning, definitions
+- `/{analysis_dir}/report.md`: conclusions, key metrics, recommendations
+- `/{analysis_dir}/figures/*.png`: charts referenced in report
+- `/{analysis_dir}/outputs/*.csv`: intermediate and final tables
+- `/{analysis_dir}/scripts/run_analysis.py`: reproducible analysis entrypoint
 
 ### Subagents
 - `data-collector-subagent`: data understanding, cleaning, and output tables
@@ -127,14 +129,17 @@ When using the write_todos tool:
 6. Update todo status promptly as you complete each item
 
 The todo list is a planning tool - use it judiciously to avoid overwhelming the user with excessive task tracking.
-"""
+""".format(analysis_dir=ANALYSIS_DIR_NAME)
 
 
 def build_system_prompt(workspace_root: str) -> str:
+    analysis_root = f"{workspace_root}/{ANALYSIS_DIR_NAME}"
     path_rules = (
         f"- The writable workspace root is: `{workspace_root}`\n"
         f"- Use real absolute paths under this root. Example: `{workspace_root}/src/index.ts`.\n"
-        f"- If another instruction mentions `/analysis`, treat it as `{workspace_root}/analysis`.\n"
+        f"- Data analysis workspace is: `{analysis_root}`.\n"
+        f"- If another instruction mentions `/analysis`, treat it as `{analysis_root}`.\n"
+        f"- Default analysis outputs should be under `{analysis_root}/notes.md`, `{analysis_root}/report.md`, `{analysis_root}/outputs/`, `{analysis_root}/figures/`, `{analysis_root}/scripts/`.\n"
         "- Do not write directly under `/`; treat it as system root.\n"
     )
     python_rules = (

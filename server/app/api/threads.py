@@ -9,7 +9,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..analysis_env import ensure_analysis_workspace_layout
 from ..config import load_config
 from ..daytona_backend import (
     delete_daytona_sandbox_for_thread,
@@ -22,15 +21,8 @@ from langchain_core.messages.base import BaseMessage
 from ..checkpointer_mysql import MySQLSaver
 from ..models import Thread, User
 from ..schemas import ThreadCreate, ThreadOut, ThreadUpdate
-from ..workspace_paths import user_workspace_path
 
 router = APIRouter(prefix="/threads", tags=["threads"])
-
-
-def _ensure_workspace_layout(username: str) -> str:
-    workspace = user_workspace_path(username, create=True)
-    ensure_analysis_workspace_layout(str(workspace))
-    return str(workspace)
 
 
 def _to_utc_aware(value: dt.datetime) -> dt.datetime:
@@ -132,7 +124,6 @@ def create_thread(
 ):
     cfg = load_config()
     try:
-        _ensure_workspace_layout(user.username)
         ensure_daytona_configured()
     except ValueError as e:
         raise HTTPException(
