@@ -123,6 +123,7 @@ def create_runtime(
     daytona_context = get_or_create_daytona_backend(
         thread_id=thread_id,
         command_timeout_seconds=cfg.sandbox.time_limit_sec,
+        allow_create_if_missing=False,
     )
     backend = daytona_context.backend
 

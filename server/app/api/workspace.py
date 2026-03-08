@@ -30,10 +30,14 @@ def _get_owned_thread(thread_id: str, user: User) -> Thread:
 def _get_daytona_context(thread_id: str):
     cfg = load_config()
     ensure_daytona_configured()
-    return get_or_create_daytona_backend(
-        thread_id=thread_id,
-        command_timeout_seconds=cfg.sandbox.time_limit_sec,
-    )
+    try:
+        return get_or_create_daytona_backend(
+            thread_id=thread_id,
+            command_timeout_seconds=cfg.sandbox.time_limit_sec,
+            allow_create_if_missing=False,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 def _normalize_root(workspace_root: str) -> str:

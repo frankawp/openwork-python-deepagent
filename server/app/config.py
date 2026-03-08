@@ -34,6 +34,9 @@ class SandboxConfig:
     enabled: bool
     time_limit_sec: int
     max_output_bytes: int
+    daytona_auto_stop_interval_min: int
+    daytona_auto_archive_interval_days: int
+    daytona_auto_delete_interval_days: int
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,7 @@ def load_config(path: str | None = None) -> AppConfig:
     data_raw = _require_key(raw, "data")
     admin_raw = _require_key(raw, "admin")
     sandbox_raw = raw.get("sandbox") or {}
+    lifecycle_raw = sandbox_raw.get("daytona_lifecycle") or {}
 
     _CONFIG = AppConfig(
         database=DatabaseConfig(url=_require_key(db_raw, "url")),
@@ -95,6 +99,15 @@ def load_config(path: str | None = None) -> AppConfig:
             enabled=bool(sandbox_raw.get("enabled", True)),
             time_limit_sec=int(sandbox_raw.get("time_limit_sec", 120)),
             max_output_bytes=int(sandbox_raw.get("max_output_bytes", 100_000)),
+            daytona_auto_stop_interval_min=int(
+                lifecycle_raw.get("auto_stop_interval_min", 0)
+            ),
+            daytona_auto_archive_interval_days=int(
+                lifecycle_raw.get("auto_archive_interval_days", 0)
+            ),
+            daytona_auto_delete_interval_days=int(
+                lifecycle_raw.get("auto_delete_interval_days", -1)
+            ),
         ),
         admin=AdminConfig(
             email=_require_key(admin_raw, "email"),

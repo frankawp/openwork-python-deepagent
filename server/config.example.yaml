@@ -20,3 +20,10 @@ sandbox:
   enabled: true
   time_limit_sec: 120
   max_output_bytes: 100000
+  daytona_lifecycle:
+    # 0 = disable auto-stop
+    auto_stop_interval_min: 0
+    # 0 = disable auto-archive
+    auto_archive_interval_days: 0
+    # -1 = disable auto-delete, 0 = delete immediately after stop
+    auto_delete_interval_days: -1
