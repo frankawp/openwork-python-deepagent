@@ -10,6 +10,9 @@
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "remoteUser": "vscode",
   "overrideCommand": true,
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
   "postCreateCommand": "bash .devcontainer/postCreate.sh",
   "customizations": {
     "vscode": {

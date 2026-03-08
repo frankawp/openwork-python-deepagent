@@ -8,12 +8,19 @@ This dev container is intended for macOS/Windows hosts that need a Linux runtime
 - Python 3 + venv tooling
 - Node.js 20 + npm/corepack
 - `uv` package manager
+- Docker outside of Docker (use host Docker daemon via mounted socket)
 
 ## First run
 
 1. Open the repo in VS Code.
 2. Run **Dev Containers: Reopen in Container**.
 3. Wait for `postCreate.sh` to finish (`npm install`, `uv sync`).
+4. Rebuild container after config changes, then verify Docker is reachable:
+
+```bash
+docker version
+docker ps
+```
 
 ## Server config recommendation
 
@@ -27,4 +34,10 @@ In `server/.env`, configure Daytona credentials:
 DAYTONA_API_KEY=...
 DAYTONA_API_URL=https://app.daytona.io/api
 DAYTONA_TARGET=us
+```
+
+For local/private Daytona stack started from inside devcontainer (using host Docker), use:
+
+```bash
+DAYTONA_API_URL=http://host.docker.internal:3000/api
 ```
