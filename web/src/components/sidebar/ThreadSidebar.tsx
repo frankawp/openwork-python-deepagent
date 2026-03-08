@@ -134,7 +134,8 @@ export function ThreadSidebar(): React.JSX.Element {
     selectThread,
     deleteThread,
     updateThread,
-    setShowKanbanView
+    setShowKanbanView,
+    threadCreation
   } = useAppStore()
 
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null)
@@ -159,8 +160,15 @@ export function ThreadSidebar(): React.JSX.Element {
   }
 
   const handleNewThread = async (): Promise<void> => {
-    await createThread({ title: `Thread ${new Date().toLocaleDateString()}` })
+    try {
+      await createThread({ title: `Thread ${new Date().toLocaleDateString()}` })
+    } catch (error) {
+      console.error("[ThreadSidebar] Failed to create thread:", error)
+    }
   }
+
+  const isCreating = threadCreation.status === "creating"
+  const hasCreateError = threadCreation.status === "failed"
 
   return (
     <aside className="flex h-full w-full flex-col border-r border-border bg-sidebar overflow-hidden">
@@ -171,15 +179,45 @@ export function ThreadSidebar(): React.JSX.Element {
           size="sm"
           className="w-full justify-start gap-2"
           onClick={handleNewThread}
+          disabled={isCreating}
         >
-          <Plus className="size-4" />
-          New Thread
+          {isCreating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+          {isCreating ? "Preparing thread..." : "New Thread"}
         </Button>
       </div>
 
       {/* Thread List */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-2 space-y-1 overflow-hidden">
+          {isCreating && (
+            <div className="flex items-center gap-2 rounded-sm px-3 py-2 bg-sidebar-accent/40 text-sidebar-foreground">
+              <Loader2 className="size-4 shrink-0 text-status-info animate-spin" />
+              <div className="min-w-0">
+                <div className="text-sm truncate">Preparing thread...</div>
+                <div className="text-[10px] text-muted-foreground truncate">
+                  Initializing sandbox workspace
+                </div>
+              </div>
+            </div>
+          )}
+
+          {hasCreateError && (
+            <div className="rounded-sm px-3 py-2 border border-status-error/40 bg-status-error/10">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="size-4 mt-0.5 shrink-0 text-status-error" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs text-status-error font-medium">Thread creation failed</div>
+                  <div className="text-[10px] text-muted-foreground truncate">
+                    {threadCreation.error || "Please retry"}
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={handleNewThread}>
+                  Retry
+                </Button>
+              </div>
+            </div>
+          )}
+
           {threads.map((thread) => (
             <ThreadListItem
               key={thread.thread_id}
@@ -196,7 +234,7 @@ export function ThreadSidebar(): React.JSX.Element {
             />
           ))}
 
-          {threads.length === 0 && (
+          {threads.length === 0 && !isCreating && (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">
               No threads yet
             </div>

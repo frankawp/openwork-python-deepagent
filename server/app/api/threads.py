@@ -33,6 +33,12 @@ def _ensure_workspace_layout(username: str) -> str:
     return str(workspace)
 
 
+def _to_utc_aware(value: dt.datetime) -> dt.datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=dt.timezone.utc)
+    return value.astimezone(dt.timezone.utc)
+
+
 def _to_out(thread: Thread) -> ThreadOut:
     return ThreadOut(
         thread_id=thread.id,
@@ -41,8 +47,8 @@ def _to_out(thread: Thread) -> ThreadOut:
         title=thread.title,
         metadata=thread.metadata_json,
         thread_values=thread.thread_values,
-        created_at=thread.created_at,
-        updated_at=thread.updated_at,
+        created_at=_to_utc_aware(thread.created_at),
+        updated_at=_to_utc_aware(thread.updated_at),
     )
 
 

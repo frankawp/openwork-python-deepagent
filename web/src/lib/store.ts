@@ -1,6 +1,14 @@
 import { create } from "zustand"
 import type { Thread, ModelConfig, Provider } from "@/types"
 
+type ThreadCreationStatus = "idle" | "creating" | "failed"
+
+interface ThreadCreationState {
+  status: ThreadCreationStatus
+  startedAt: Date | null
+  error: string | null
+}
+
 interface AppState {
   // Threads
   threads: Thread[]
@@ -22,6 +30,7 @@ interface AppState {
   // Kanban view state
   showKanbanView: boolean
   showSubagentsInKanban: boolean
+  threadCreation: ThreadCreationState
 
   // Thread actions
   loadThreads: () => Promise<void>
@@ -63,6 +72,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   sidebarCollapsed: false,
   showKanbanView: false,
   showSubagentsInKanban: true,
+  threadCreation: {
+    status: "idle",
+    startedAt: null,
+    error: null
+  },
 
   // Thread actions
   loadThreads: async () => {
@@ -76,13 +90,37 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   createThread: async (metadata?: Record<string, unknown>) => {
-    const thread = await window.api.threads.create(metadata)
-    set((state) => ({
-      threads: [thread, ...state.threads],
-      currentThreadId: thread.thread_id,
-      showKanbanView: false
-    }))
-    return thread
+    set({
+      threadCreation: {
+        status: "creating",
+        startedAt: new Date(),
+        error: null
+      }
+    })
+    try {
+      const thread = await window.api.threads.create(metadata)
+      set((state) => ({
+        threads: [thread, ...state.threads],
+        currentThreadId: thread.thread_id,
+        showKanbanView: false,
+        threadCreation: {
+          status: "idle",
+          startedAt: null,
+          error: null
+        }
+      }))
+      return thread
+    } catch (error) {
+      set((state) => ({
+        threadCreation: {
+          status: "failed",
+          startedAt: state.threadCreation.startedAt,
+          error:
+            (error as { message?: string })?.message || "Failed to create thread. Please try again."
+        }
+      }))
+      throw error
+    }
   },
 
   selectThread: async (threadId: string) => {

@@ -507,13 +507,14 @@ function TaskItem({ todo }: { todo: Todo }): React.JSX.Element {
 }
 
 function FilesContent(): React.JSX.Element {
-  const { currentThreadId } = useAppStore()
+  const { currentThreadId, threadCreation } = useAppStore()
   const threadState = useThreadState(currentThreadId)
   const workspaceFiles = threadState?.workspaceFiles ?? []
   const workspacePath = threadState?.workspacePath ?? null
   const setWorkspacePath = threadState?.setWorkspacePath
   const setWorkspaceFiles = threadState?.setWorkspaceFiles
   const [refreshing, setRefreshing] = useState(false)
+  const isCreatingThread = threadCreation.status === "creating"
 
   // Load workspace path and files for current thread
   useEffect(() => {
@@ -566,7 +567,7 @@ function FilesContent(): React.JSX.Element {
           variant="ghost"
           size="sm"
           onClick={handleRefresh}
-          disabled={refreshing || !currentThreadId}
+          disabled={refreshing || !currentThreadId || isCreatingThread}
           className="h-5 px-1.5 text-[10px]"
           title="Refresh sandbox files"
         >
@@ -580,7 +581,13 @@ function FilesContent(): React.JSX.Element {
       </div>
 
       {/* File tree or empty state */}
-      {workspaceFiles.length === 0 ? (
+      {isCreatingThread ? (
+        <div className="flex flex-col items-center justify-center text-center text-sm text-muted-foreground py-8 px-4 flex-1">
+          <Loader2 className="size-8 mb-2 text-status-info animate-spin" />
+          <span>Preparing sandbox workspace...</span>
+          <span className="text-xs mt-1">Files will appear after thread initialization</span>
+        </div>
+      ) : workspaceFiles.length === 0 ? (
         <div className="flex flex-col items-center justify-center text-center text-sm text-muted-foreground py-8 px-4 flex-1">
           <FolderTree className="size-8 mb-2 opacity-50" />
           <span>No workspace files</span>

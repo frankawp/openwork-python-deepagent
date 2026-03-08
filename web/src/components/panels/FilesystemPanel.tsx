@@ -16,7 +16,7 @@ import { useThreadState } from "@/lib/thread-context"
 import type { FileInfo } from "@/types"
 
 export function FilesystemPanel() {
-  const { currentThreadId } = useAppStore()
+  const { currentThreadId, threadCreation } = useAppStore()
   const threadState = useThreadState(currentThreadId)
   const workspaceFiles = threadState?.workspaceFiles ?? []
   const workspacePath = threadState?.workspacePath ?? null
@@ -24,6 +24,7 @@ export function FilesystemPanel() {
   const setWorkspaceFiles = threadState?.setWorkspaceFiles
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
+  const isCreatingThread = threadCreation.status === "creating"
 
   // Load workspace path for current thread
   useEffect(() => {
@@ -243,6 +244,21 @@ export function FilesystemPanel() {
 
   // Get root level items (all paths are normalized to start with /)
   const rootItems = tree.get("/") || []
+
+  if (isCreatingThread) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="p-4 border-b border-border">
+          <span className="text-section-header">WORKSPACE</span>
+        </div>
+        <div className="flex flex-col items-center justify-center flex-1 text-center px-4">
+          <Loader2 className="size-8 mb-3 text-status-info animate-spin" />
+          <span className="text-sm font-medium mb-1">Preparing sandbox workspace...</span>
+          <span className="text-xs text-muted-foreground">Files will appear once initialization completes</span>
+        </div>
+      </div>
+    )
+  }
 
   // If no workspace is selected, show selection prompt
   if (!workspacePath) {
