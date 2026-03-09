@@ -10,5 +10,6 @@ __pycache__/
 server/uv.lock
 .env
 server/.env
+server/config.yaml
 .run/
 .mcp.json
