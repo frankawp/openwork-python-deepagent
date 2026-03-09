@@ -10,7 +10,5 @@ __pycache__/
 server/uv.lock
 .env
 server/.env
-.run/*
-!.run/daytona-local/
-!.run/daytona-local/**
+.run/
 .mcp.json

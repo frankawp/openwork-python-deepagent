@@ -35,9 +35,3 @@ DAYTONA_API_KEY=...
 DAYTONA_API_URL=https://app.daytona.io/api
 DAYTONA_TARGET=us
 ```
-
-For local/private Daytona stack started from inside devcontainer (using host Docker), use:
-
-```bash
-DAYTONA_API_URL=http://host.docker.internal:3000/api
-```

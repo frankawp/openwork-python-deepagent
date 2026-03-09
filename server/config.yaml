@@ -13,67 +13,9 @@ admin:
   password: "admin123"
 sandbox:
   enabled: true
-  nsjail_path: "nsjail"
-  allow_local_fallback: false
-  disable_clone_newns: true
-  rootfs_dir: ".sandbox-root"
-  readonly_bind_mounts:
-    - "/bin"
-    - "/usr"
-    - "/usr/local"
-    - "/lib"
-    - "/lib64"
-    - "/etc"
-  mount_dev: true
-  mount_proc: false
-  rlimit_as_mb: 1024
-  rlimit_cpu_sec: 120
-  rlimit_fsize_mb: 512
   time_limit_sec: 120
   max_output_bytes: 100000
-  seccomp_profile: "strict"
-  seccomp_profiles:
-    strict: |
-      POLICY python_analysis_strict {
-        ALLOW {
-          read, write, close, exit, exit_group,
-          open, openat, creat, access, faccessat,
-          stat, fstat, lstat, fstatat, statx,
-          lseek, readlink, readlinkat, getdents64, statfs, fstatfs,
-          mkdir, mkdirat, rmdir, unlink, unlinkat, rename, renameat, renameat2,
-          truncate, ftruncate, fsync, fdatasync,
-          mmap, mprotect, munmap, brk, madvise,
-          rt_sigaction, rt_sigprocmask, rt_sigreturn, sigaltstack,
-          futex, clock_gettime, clock_nanosleep, gettimeofday, nanosleep, sched_yield,
-          getpid, gettid, getuid, geteuid, getgid, getegid, getppid, getpgrp, getcwd, uname,
-          arch_prctl, set_tid_address, set_robust_list, getrandom, rseq,
-          fcntl, ioctl,
-          dup, dup2, dup3, pipe, pipe2,
-          poll, ppoll, select, pselect6,
-          wait4, waitid, execve
-        }
-      }
-      USE python_analysis_strict DEFAULT KILL
-    permissive: |
-      POLICY python_analysis {
-        ALLOW {
-          read, write, close, exit, exit_group,
-          open, openat, creat, access, faccessat,
-          stat, fstat, lstat, fstatat, statx,
-          lseek, readlink, readlinkat, getdents64, statfs, fstatfs,
-          mkdir, mkdirat, rmdir, unlink, unlinkat, rename, renameat, renameat2,
-          symlink, symlinkat, link, linkat,
-          truncate, ftruncate, fsync, fdatasync,
-          chmod, fchmod, fchmodat, chown, fchown, fchownat,
-          mmap, mprotect, munmap, brk, madvise,
-          rt_sigaction, rt_sigprocmask, rt_sigreturn, sigaltstack,
-          futex, clock_gettime, clock_nanosleep, gettimeofday, nanosleep, sched_yield,
-          getpid, gettid, getuid, geteuid, getgid, getegid, getppid, getpgrp, getcwd, uname,
-          arch_prctl, set_tid_address, set_robust_list, prlimit64, getrlimit, setrlimit, getrandom, rseq,
-          fcntl, ioctl,
-          dup, dup2, dup3, pipe, pipe2, socketpair,
-          poll, ppoll, select, pselect6, epoll_create1, epoll_ctl, epoll_wait, eventfd2,
-          wait4, waitid, clone, clone3, execve, execveat
-        }
-      }
-      USE python_analysis DEFAULT KILL
+  daytona_lifecycle:
+    auto_stop_interval_min: 0
+    auto_archive_interval_days: 0
+    auto_delete_interval_days: -1

@@ -45,12 +45,6 @@ cd server
 ./venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Daytona Local (Private)
-
-If you want Daytona to run fully on your local machine (instead of Daytona Cloud), follow:
-
-- [docs/daytona-local-private.md](docs/daytona-local-private.md)
-
 ## Web (B/S)
 
 ```bash
