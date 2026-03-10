@@ -16,7 +16,7 @@ export function WorkspacePicker({ threadId }: WorkspacePickerProps): React.JSX.E
       setWorkspacePath(path)
 
       if (path) {
-        const result = await window.api.workspace.loadFromDisk(threadId)
+        const result = await window.api.workspace.loadTree(threadId, "/", 2)
         if (result.success && result.files) {
           setWorkspaceFiles(result.files)
         }

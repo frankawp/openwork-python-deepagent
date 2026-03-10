@@ -514,22 +514,78 @@ function FilesContent(): React.JSX.Element {
   const setWorkspacePath = threadState?.setWorkspacePath
   const setWorkspaceFiles = threadState?.setWorkspaceFiles
   const [refreshing, setRefreshing] = useState(false)
+  const [loadingDirs, setLoadingDirs] = useState<Set<string>>(new Set())
+  const loadedDirsRef = useRef<Set<string>>(new Set())
+  const loadingDirsRef = useRef<Set<string>>(new Set())
   const isCreatingThread = threadCreation.status === "creating"
 
-  // Load workspace path and files for current thread
+  const normalizeDirPath = useCallback((path: string) => {
+    if (!path || path === "/") return "/"
+    const normalized = path.startsWith("/") ? path : `/${path}`
+    return normalized.replace(/\/+$/, "") || "/"
+  }, [])
+
+  const mergeFileLists = useCallback((base: FileInfo[], incoming: FileInfo[]) => {
+    const merged = new Map<string, FileInfo>()
+    for (const file of base) {
+      merged.set(file.path, file)
+    }
+    for (const file of incoming) {
+      merged.set(file.path, file)
+    }
+    return Array.from(merged.values()).sort((a, b) => a.path.localeCompare(b.path))
+  }, [])
+
+  const fetchDirectoryTree = useCallback(
+    async (dirPath: string, force = false): Promise<boolean> => {
+      if (!currentThreadId || !setWorkspaceFiles) return false
+      const normalizedDir = normalizeDirPath(dirPath)
+      if (!force && loadedDirsRef.current.has(normalizedDir)) return true
+      if (loadingDirsRef.current.has(normalizedDir)) return false
+
+      loadingDirsRef.current.add(normalizedDir)
+      setLoadingDirs(new Set(loadingDirsRef.current))
+
+      try {
+        const result = await window.api.workspace.loadTree(currentThreadId, normalizedDir, 2)
+        if (result.success && Array.isArray(result.files)) {
+          setWorkspaceFiles((prev) => mergeFileLists(prev, result.files))
+          loadedDirsRef.current.add(normalizedDir)
+          return true
+        }
+      } catch (e) {
+        console.error("[FilesContent] Directory load failed:", e)
+      } finally {
+        loadingDirsRef.current.delete(normalizedDir)
+        setLoadingDirs(new Set(loadingDirsRef.current))
+      }
+      return false
+    },
+    [currentThreadId, mergeFileLists, normalizeDirPath, setWorkspaceFiles]
+  )
+
+  // Load workspace path and the first two levels for current thread.
   useEffect(() => {
     async function loadWorkspace(): Promise<void> {
-      if (currentThreadId && setWorkspacePath && setWorkspaceFiles) {
+      if (!currentThreadId || !setWorkspacePath || !setWorkspaceFiles) return
+
+      setRefreshing(true)
+      loadedDirsRef.current.clear()
+      loadingDirsRef.current.clear()
+      setLoadingDirs(new Set())
+      setWorkspaceFiles([])
+
+      try {
         const path = await window.api.workspace.get(currentThreadId)
         setWorkspacePath(path)
 
-        // If a folder is linked, load files from disk
         if (path) {
-          const result = await window.api.workspace.loadFromDisk(currentThreadId)
-          if (result.success && result.files) {
-            setWorkspaceFiles(result.files)
-          }
+          await fetchDirectoryTree("/", true)
         }
+      } catch (e) {
+        console.error("[FilesContent] Initial workspace load failed:", e)
+      } finally {
+        setRefreshing(false)
       }
     }
     loadWorkspace()
@@ -539,12 +595,16 @@ function FilesContent(): React.JSX.Element {
   async function handleRefresh(): Promise<void> {
     if (!currentThreadId || !setWorkspaceFiles || !setWorkspacePath) return
     setRefreshing(true)
+    loadedDirsRef.current.clear()
+    loadingDirsRef.current.clear()
+    setLoadingDirs(new Set())
+    setWorkspaceFiles([])
+
     try {
       const path = await window.api.workspace.get(currentThreadId)
       setWorkspacePath(path)
-      const result = await window.api.workspace.loadFromDisk(currentThreadId)
-      if (result.success && result.files) {
-        setWorkspaceFiles(result.files)
+      if (path) {
+        await fetchDirectoryTree("/", true)
       }
     } catch (e) {
       console.error("[FilesContent] Refresh failed:", e)
@@ -595,7 +655,11 @@ function FilesContent(): React.JSX.Element {
         </div>
       ) : (
         <div className="py-1 overflow-auto flex-1">
-          <FileTree files={workspaceFiles} />
+          <FileTree
+            files={workspaceFiles}
+            loadingDirs={loadingDirs}
+            onLoadDirectory={(path) => fetchDirectoryTree(path)}
+          />
         </div>
       )}
     </div>
@@ -693,24 +757,44 @@ function buildFileTree(files: FileInfo[]): TreeNode[] {
   return root
 }
 
-function FileTree({ files }: { files: FileInfo[] }): React.JSX.Element {
+function FileTree({
+  files,
+  loadingDirs,
+  onLoadDirectory
+}: {
+  files: FileInfo[]
+  loadingDirs: Set<string>
+  onLoadDirectory: (path: string) => Promise<boolean>
+}): React.JSX.Element {
   const { currentThreadId } = useAppStore()
   const threadState = useThreadState(currentThreadId)
   const openFile = threadState?.openFile
   const tree = useMemo(() => buildFileTree(files), [files])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  const toggleExpand = useCallback((path: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(path)) {
-        next.delete(path)
-      } else {
-        next.add(path)
+  const handleNodeClick = useCallback(
+    async (path: string, isDir: boolean) => {
+      if (!isDir) return
+
+      const isExpanded = expanded.has(path)
+      if (isExpanded) {
+        setExpanded((prev) => {
+          const next = new Set(prev)
+          next.delete(path)
+          return next
+        })
+        return
       }
-      return next
-    })
-  }, [])
+
+      await onLoadDirectory(path)
+      setExpanded((prev) => {
+        const next = new Set(prev)
+        next.add(path)
+        return next
+      })
+    },
+    [expanded, onLoadDirectory]
+  )
 
   return (
     <div className="select-none">
@@ -720,7 +804,8 @@ function FileTree({ files }: { files: FileInfo[] }): React.JSX.Element {
           node={node}
           depth={0}
           expanded={expanded}
-          onToggle={toggleExpand}
+          onToggle={handleNodeClick}
+          loadingDirs={loadingDirs}
           openFile={openFile}
         />
       ))}
@@ -734,21 +819,24 @@ const FileTreeNode = memo(
     depth,
     expanded,
     onToggle,
+    loadingDirs,
     openFile
   }: {
     node: TreeNode
     depth: number
     expanded: Set<string>
-    onToggle: (path: string) => void
+    onToggle: (path: string, isDir: boolean) => Promise<void>
+    loadingDirs: Set<string>
     openFile?: (path: string, name: string) => void
   }): React.JSX.Element {
     const isExpanded = expanded.has(node.path)
-    const hasChildren = node.children.length > 0
+    const isLoading = loadingDirs.has(node.path)
     const paddingLeft = 8 + depth * 16
 
-    const handleClick = (): void => {
+    const handleClick = async (): Promise<void> => {
       if (node.is_dir) {
-        onToggle(node.path)
+        if (isLoading) return
+        await onToggle(node.path, true)
       } else if (openFile) {
         // Open file in a new tab
         openFile(node.path, node.name)
@@ -767,12 +855,13 @@ const FileTreeNode = memo(
           {/* Expand/collapse chevron for directories */}
           {node.is_dir ? (
             <span className="w-3.5 flex items-center justify-center shrink-0">
-              {hasChildren &&
-                (isExpanded ? (
-                  <ChevronDown className="size-3 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="size-3 text-muted-foreground" />
-                ))}
+              {isLoading ? (
+                <Loader2 className="size-3 text-muted-foreground animate-spin" />
+              ) : isExpanded ? (
+                <ChevronDown className="size-3 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="size-3 text-muted-foreground" />
+              )}
             </span>
           ) : (
             <span className="w-3.5 shrink-0" />
@@ -785,7 +874,7 @@ const FileTreeNode = memo(
           <span className="truncate flex-1">{node.name}</span>
 
           {/* Size for files */}
-          {!node.is_dir && node.size !== undefined && (
+          {!node.is_dir && typeof node.size === "number" && Number.isFinite(node.size) && (
             <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
               {formatSize(node.size)}
             </span>
@@ -802,6 +891,7 @@ const FileTreeNode = memo(
               depth={depth + 1}
               expanded={expanded}
               onToggle={onToggle}
+              loadingDirs={loadingDirs}
               openFile={openFile}
             />
           ))}
@@ -820,6 +910,8 @@ const FileTreeNode = memo(
         nextProps.expanded.has(nextProps.node.path) &&
       prevProps.openFile === nextProps.openFile &&
       prevProps.onToggle === nextProps.onToggle &&
+      prevProps.loadingDirs.has(prevProps.node.path) ===
+        nextProps.loadingDirs.has(nextProps.node.path) &&
       prevProps.depth === nextProps.depth
     )
   }

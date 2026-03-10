@@ -197,7 +197,10 @@ export function attachWindowApi() {
         if (!threadId) return Promise.resolve(null)
         return apiFetch(`/workspace?thread_id=${threadId}`).then((res: any) => res.path ?? null)
       },
-      loadFromDisk: (threadId: string) => apiFetch(`/workspace/files?thread_id=${threadId}`),
+      loadTree: (threadId: string, path: string = "/", depth: number = 2) =>
+        apiFetch(
+          `/workspace/tree?thread_id=${threadId}&path=${encodeURIComponent(path)}&depth=${depth}`
+        ),
       readFile: (threadId: string, filePath: string) =>
         apiFetch(`/workspace/file?thread_id=${threadId}&path=${encodeURIComponent(filePath)}`),
       readBinaryFile: (threadId: string, filePath: string) =>

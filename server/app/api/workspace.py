@@ -11,7 +11,7 @@ from ..daytona_backend import ensure_daytona_configured, get_or_create_daytona_b
 from ..db import SessionLocal
 from ..deps import get_current_user
 from ..models import Thread, User
-from ..schemas import WorkspaceListOut, WorkspaceReadOut
+from ..schemas import WorkspaceListOut, WorkspaceReadOut, WorkspaceTreeOut
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -138,6 +138,59 @@ def _list_workspace_files(backend: Any, workspace_root: str) -> list[dict[str, A
     return files
 
 
+def _list_workspace_tree(
+    backend: Any,
+    workspace_root: str,
+    anchor_path: str,
+    depth: int,
+) -> tuple[str, list[dict[str, Any]]]:
+    anchor_full_path = _safe_sandbox_path(workspace_root, anchor_path)
+    files: list[dict[str, Any]] = []
+    queue: list[tuple[str, int]] = [(anchor_full_path, 0)]
+
+    while queue:
+        current_dir, current_depth = queue.pop(0)
+        if current_depth >= depth:
+            continue
+
+        next_depth = current_depth + 1
+        for entry in backend.ls_info(current_dir):
+            entry_path = entry.get("path") if isinstance(entry, dict) else None
+            if not isinstance(entry_path, str):
+                continue
+
+            normalized = posixpath.normpath(entry_path)
+            if not normalized.startswith("/"):
+                normalized = f"/{normalized}"
+
+            if not _is_within_root(workspace_root, normalized):
+                continue
+
+            rel_path = _to_relative_path(workspace_root, normalized)
+            if rel_path == "/" or _is_hidden_or_ignored(rel_path):
+                continue
+
+            is_dir = bool(entry.get("is_dir")) if isinstance(entry, dict) else False
+            item: dict[str, Any] = {
+                "path": rel_path,
+                "is_dir": is_dir,
+            }
+            if isinstance(entry, dict):
+                size = entry.get("size")
+                modified_at = entry.get("modified_at")
+                if isinstance(size, int):
+                    item["size"] = size
+                if isinstance(modified_at, str):
+                    item["modified_at"] = modified_at
+            files.append(item)
+
+            if is_dir and next_depth < depth:
+                queue.append((normalized, next_depth))
+
+    files.sort(key=lambda x: x.get("path", ""))
+    return _to_relative_path(workspace_root, anchor_full_path), files
+
+
 def _download_file_bytes(backend: Any, full_path: str) -> bytes:
     responses = backend.download_files([full_path])
     if not responses:
@@ -176,6 +229,33 @@ def list_files(thread_id: str, user: User = Depends(get_current_user)):
     files = _list_workspace_files(daytona_context.backend, daytona_context.workspace_root)
     return {
         "success": True,
+        "files": files,
+        "workspacePath": _normalize_root(daytona_context.workspace_root),
+    }
+
+
+@router.get("/tree", response_model=WorkspaceTreeOut)
+def list_tree(
+    thread_id: str,
+    path: str = "/",
+    depth: int = 2,
+    user: User = Depends(get_current_user),
+):
+    if depth != 2:
+        raise HTTPException(status_code=400, detail="Only depth=2 is supported")
+
+    _get_owned_thread(thread_id, user)
+    daytona_context = _get_daytona_context(thread_id)
+    anchor_path, files = _list_workspace_tree(
+        daytona_context.backend,
+        daytona_context.workspace_root,
+        path,
+        depth,
+    )
+    return {
+        "success": True,
+        "path": anchor_path,
+        "depth": depth,
         "files": files,
         "workspacePath": _normalize_root(daytona_context.workspace_root),
     }

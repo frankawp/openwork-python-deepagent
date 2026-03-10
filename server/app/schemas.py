@@ -102,6 +102,15 @@ class WorkspaceListOut(BaseModel):
     error: Optional[str] = None
 
 
+class WorkspaceTreeOut(BaseModel):
+    success: bool
+    path: str
+    depth: int
+    files: list[WorkspaceFile]
+    workspacePath: Optional[str] = None
+    error: Optional[str] = None
+
+
 class WorkspaceReadOut(BaseModel):
     success: bool
     content: Optional[str] = None
