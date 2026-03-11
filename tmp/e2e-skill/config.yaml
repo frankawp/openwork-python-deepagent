@@ -1,0 +1,21 @@
+database:
+  url: "sqlite:////Users/frankliu/Code/langchain-openwork/tmp/e2e-skill/openwork-e2e.sqlite"
+auth:
+  jwt_secret: "e2e-secret"
+  access_ttl_min: 60
+  refresh_ttl_days: 7
+workspace:
+  root: "/Users/frankliu/Code/langchain-openwork/tmp/e2e-skill/workspaces"
+data:
+  dir: "/Users/frankliu/Code/langchain-openwork/tmp/e2e-skill/data"
+admin:
+  email: "admin@example.com"
+  password: "admin123"
+sandbox:
+  enabled: false
+  time_limit_sec: 120
+  max_output_bytes: 100000
+  daytona_lifecycle:
+    auto_stop_interval_min: 0
+    auto_archive_interval_days: 0
+    auto_delete_interval_days: -1

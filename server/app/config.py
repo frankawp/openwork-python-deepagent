@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+
+@dataclass(frozen=True)
+class DatabaseConfig:
+    url: str
+
+
+@dataclass(frozen=True)
+class AuthConfig:
+    jwt_secret: str
+    access_ttl_min: int
+    refresh_ttl_days: int
+
+
+@dataclass(frozen=True)
+class WorkspaceConfig:
+    root: str
+
+
+@dataclass(frozen=True)
+class DataConfig:
+    dir: str
+
+
+@dataclass(frozen=True)
+class SandboxConfig:
+    enabled: bool
+    time_limit_sec: int
+    max_output_bytes: int
+    daytona_auto_stop_interval_min: int
+    daytona_auto_archive_interval_days: int
+    daytona_auto_delete_interval_days: int
+
+
+@dataclass(frozen=True)
+class AdminConfig:
+    email: str
+    password: str
+
+
+@dataclass(frozen=True)
+class AppConfig:
+    database: DatabaseConfig
+    auth: AuthConfig
+    workspace: WorkspaceConfig
+    data: DataConfig
+    sandbox: SandboxConfig
+    admin: AdminConfig
+
+
+_CONFIG: AppConfig | None = None
+
+
+def _require_key(data: dict[str, Any], key: str) -> Any:
+    if key not in data:
+        raise ValueError(f"Missing config key: {key}")
+    return data[key]
+
+
+def load_config(path: str | None = None) -> AppConfig:
+    global _CONFIG
+    if _CONFIG is not None:
+        return _CONFIG
+
+    config_path = Path(path or "config.yaml").resolve()
+    if not config_path.exists():
+        raise FileNotFoundError(
+            f"Config file not found: {config_path}. Copy config.example.yaml to config.yaml."
+        )
+
+    with config_path.open("r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+
+    db_raw = _require_key(raw, "database")
+    auth_raw = _require_key(raw, "auth")
+    workspace_raw = _require_key(raw, "workspace")
+    data_raw = _require_key(raw, "data")
+    admin_raw = _require_key(raw, "admin")
+    sandbox_raw = raw.get("sandbox") or {}
+    lifecycle_raw = sandbox_raw.get("daytona_lifecycle") or {}
+
+    _CONFIG = AppConfig(
+        database=DatabaseConfig(url=_require_key(db_raw, "url")),
+        auth=AuthConfig(
+            jwt_secret=_require_key(auth_raw, "jwt_secret"),
+            access_ttl_min=int(_require_key(auth_raw, "access_ttl_min")),
+            refresh_ttl_days=int(_require_key(auth_raw, "refresh_ttl_days")),
+        ),
+        workspace=WorkspaceConfig(root=_require_key(workspace_raw, "root")),
+        data=DataConfig(dir=_require_key(data_raw, "dir")),
+        sandbox=SandboxConfig(
+            enabled=bool(sandbox_raw.get("enabled", True)),
+            time_limit_sec=int(sandbox_raw.get("time_limit_sec", 120)),
+            max_output_bytes=int(sandbox_raw.get("max_output_bytes", 100_000)),
+            daytona_auto_stop_interval_min=int(
+                lifecycle_raw.get("auto_stop_interval_min", 0)
+            ),
+            daytona_auto_archive_interval_days=int(
+                lifecycle_raw.get("auto_archive_interval_days", 0)
+            ),
+            daytona_auto_delete_interval_days=int(
+                lifecycle_raw.get("auto_delete_interval_days", -1)
+            ),
+        ),
+        admin=AdminConfig(
+            email=_require_key(admin_raw, "email"),
+            password=_require_key(admin_raw, "password"),
+        ),
+    )
+    return _CONFIG

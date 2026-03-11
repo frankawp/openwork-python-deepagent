@@ -5,3 +5,11 @@ out
 .eslintcache
 *.log*
 release
+__pycache__/
+*.pyc
+server/uv.lock
+.env
+server/.env
+server/config.yaml
+.run/
+.mcp.json

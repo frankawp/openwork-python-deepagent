@@ -38,6 +38,20 @@ npm run dev
 
 Or configure them in-app via the settings panel.
 
+## Server (B/S)
+
+```bash
+cd server
+./venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+## Web (B/S)
+
+```bash
+cd web
+npm run dev
+```
+
 ## Supported Models
 
 | Provider  | Models                                                                                 |
