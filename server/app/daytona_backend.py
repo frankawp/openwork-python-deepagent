@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import logging
 import os
-import shlex
 from dataclasses import dataclass
 from typing import Any
 
-from .analysis_env import ANALYSIS_DIR_NAME, ANALYSIS_SUBDIRS, DEFAULT_REQUIREMENTS
 from .config import load_config
 from .db import SessionLocal
 from .models import Thread
@@ -95,11 +93,6 @@ def ensure_daytona_thread_environment(
         thread_id=thread_id,
         command_timeout_seconds=command_timeout_seconds,
         allow_create_if_missing=True,
-    )
-    _ensure_analysis_layout_in_daytona(
-        context.backend,
-        workspace_root=context.workspace_root,
-        command_timeout_seconds=command_timeout_seconds,
     )
     return context.workspace_root
 
@@ -236,32 +229,6 @@ def _resolve_workspace_root(sandbox: Any) -> str:
         stripped = work_dir.rstrip("/")
         return stripped or "/"
     return _DAYTONA_DEFAULT_WORKSPACE_ROOT
-
-
-def _ensure_analysis_layout_in_daytona(
-    backend: Any,
-    *,
-    workspace_root: str,
-    command_timeout_seconds: int,
-) -> None:
-    requirements = DEFAULT_REQUIREMENTS.rstrip("\n")
-    analysis_dir = f"{workspace_root.rstrip('/')}/{ANALYSIS_DIR_NAME}"
-    requirements_path = f"{analysis_dir}/requirements.txt"
-    escaped_subdirs = [shlex.quote(f"{analysis_dir}/{name}") for name in ANALYSIS_SUBDIRS]
-    escaped_requirements = shlex.quote(requirements_path)
-    command = (
-        f"mkdir -p {' '.join(escaped_subdirs)} && "
-        f"if [ ! -f {escaped_requirements} ]; then "
-        f"cat > {escaped_requirements} <<'EOF'\n{requirements}\nEOF\n"
-        "fi"
-    )
-
-    timeout = max(int(command_timeout_seconds), 10)
-    result = backend.execute(command, timeout=timeout)
-    if result.exit_code != 0:
-        message = result.output or "unknown error"
-        raise RuntimeError(f"Failed to prepare Daytona {ANALYSIS_DIR_NAME} workspace: {message}")
-
 
 def _get_thread_daytona_sandbox_id(thread_id: str) -> str | None:
     db = SessionLocal()
