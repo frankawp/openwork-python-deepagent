@@ -3,6 +3,7 @@ import { ThreadSidebar } from "@/components/sidebar/ThreadSidebar"
 import { TabbedPanel, TabBar } from "@/components/tabs"
 import { RightPanel } from "@/components/panels/RightPanel"
 import { KanbanView, KanbanHeader } from "@/components/kanban"
+import { SkillsPage } from "@/components/skills/SkillsPage"
 import { ResizeHandle } from "@/components/ui/resizable"
 import { useAppStore } from "@/lib/store"
 import { ThreadProvider } from "@/lib/thread-context"
@@ -17,7 +18,7 @@ const RIGHT_MAX = 450
 const RIGHT_DEFAULT = 320
 
 function App(): React.JSX.Element {
-  const { currentThreadId, loadThreads, createThread, showKanbanView } = useAppStore()
+  const { currentThreadId, loadThreads, createThread, showKanbanView, showSkillsView } = useAppStore()
   const [isLoading, setIsLoading] = useState(true)
   const [authRequired, setAuthRequired] = useState(false)
   const [authEmail, setAuthEmail] = useState("")
@@ -208,6 +209,8 @@ function App(): React.JSX.Element {
             <div className="flex-1 min-w-0 bg-background border-b border-border">
               {showKanbanView ? (
                 <KanbanHeader className="h-full" />
+              ) : showSkillsView ? (
+                <div className="h-full flex items-center px-4 text-sm font-medium">Skills</div>
               ) : (
                 currentThreadId && <TabBar className="h-full border-b-0" />
               )}
@@ -228,6 +231,10 @@ function App(): React.JSX.Element {
               <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
                 <KanbanView />
               </main>
+            ) : showSkillsView ? (
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                <SkillsPage />
+              </main>
             ) : (
               <>
                 {/* Center - Content Panel (Agent Chat + File Viewer) */}
@@ -245,7 +252,7 @@ function App(): React.JSX.Element {
           </div>
         </div>
 
-        {!showKanbanView && (
+        {!showKanbanView && !showSkillsView && (
           <>
             <ResizeHandle onDrag={handleRightResize} />
 

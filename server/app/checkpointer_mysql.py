@@ -295,6 +295,60 @@ class MySQLSaver(BaseCheckpointSaver[str]):
             )
             db.commit()
 
+    def clear_channel_value(self, thread_id: str, channel: str, checkpoint_ns: str = "") -> int:
+        """Remove a channel from persisted checkpoint channel_values for a thread.
+
+        This preserves conversation history while forcing middleware that caches
+        private state (e.g., skills metadata) to recompute on next run.
+        """
+        updated = 0
+        with self._get_session() as db:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT checkpoint_id, checkpoint
+                    FROM checkpoints
+                    WHERE thread_id = :thread_id AND checkpoint_ns = :checkpoint_ns
+                    """
+                ),
+                {"thread_id": thread_id, "checkpoint_ns": checkpoint_ns},
+            ).fetchall()
+
+            for checkpoint_id, checkpoint_blob in rows:
+                checkpoint = self._unpack(checkpoint_blob)
+                if not isinstance(checkpoint, dict):
+                    continue
+                channel_values = checkpoint.get("channel_values")
+                if not isinstance(channel_values, dict) or channel not in channel_values:
+                    continue
+
+                updated_channel_values = dict(channel_values)
+                updated_channel_values.pop(channel, None)
+                checkpoint["channel_values"] = updated_channel_values
+
+                db.execute(
+                    text(
+                        """
+                        UPDATE checkpoints
+                        SET checkpoint = :checkpoint
+                        WHERE thread_id = :thread_id
+                          AND checkpoint_ns = :checkpoint_ns
+                          AND checkpoint_id = :checkpoint_id
+                        """
+                    ),
+                    {
+                        "thread_id": thread_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "checkpoint_id": checkpoint_id,
+                        "checkpoint": self._pack(checkpoint),
+                    },
+                )
+                updated += 1
+
+            if updated:
+                db.commit()
+        return updated
+
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         return await asyncio.to_thread(self.get_tuple, config)
 

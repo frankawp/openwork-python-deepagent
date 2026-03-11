@@ -1,5 +1,14 @@
 import { useState } from "react"
-import { Plus, MessageSquare, Trash2, Pencil, Loader2, LayoutGrid, AlertCircle } from "lucide-react"
+import {
+  Plus,
+  MessageSquare,
+  Trash2,
+  Pencil,
+  Loader2,
+  LayoutGrid,
+  AlertCircle,
+  Wrench
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAppStore } from "@/lib/store"
@@ -135,6 +144,9 @@ export function ThreadSidebar(): React.JSX.Element {
     deleteThread,
     updateThread,
     setShowKanbanView,
+    setShowSkillsView,
+    showSkillsView,
+    showKanbanView,
     threadCreation
   } = useAppStore()
 
@@ -247,7 +259,22 @@ export function ThreadSidebar(): React.JSX.Element {
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start gap-2"
+          className={cn(
+            "w-full justify-start gap-2",
+            showSkillsView && "bg-sidebar-accent text-sidebar-accent-foreground"
+          )}
+          onClick={() => setShowSkillsView(true)}
+        >
+          <Wrench className="size-4" />
+          Skills
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "w-full justify-start gap-2 mt-1",
+            showKanbanView && "bg-sidebar-accent text-sidebar-accent-foreground"
+          )}
           onClick={() => setShowKanbanView(true)}
         >
           <LayoutGrid className="size-4" />

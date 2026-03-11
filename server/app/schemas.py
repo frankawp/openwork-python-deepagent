@@ -53,6 +53,72 @@ class ThreadUpdate(BaseModel):
     thread_values: Optional[dict[str, Any]] = None
 
 
+class SkillCreate(BaseModel):
+    key: str
+    name: str
+    description: str
+    enabled: bool = True
+
+
+class SkillUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class SkillOut(BaseModel):
+    id: str
+    user_id: str
+    key: str
+    name: str
+    description: str
+    enabled: bool
+    created_at: dt.datetime
+    updated_at: dt.datetime
+
+
+class SkillFileUpsert(BaseModel):
+    path: str
+    content: str
+
+
+class SkillFileOut(BaseModel):
+    id: str
+    skill_id: str
+    path: str
+    checksum: str
+    updated_at: dt.datetime
+
+
+class SkillFileDetailOut(SkillFileOut):
+    content: str
+
+
+class ThreadSkillBindingOut(BaseModel):
+    id: str
+    thread_id: str
+    skill_id: str
+    position: int
+    enabled: bool
+    created_at: dt.datetime
+    updated_at: dt.datetime
+    skill: SkillOut
+
+
+class ThreadSkillBindingSet(BaseModel):
+    skill_ids: list[str]
+
+
+class ThreadSkillMaterializationStateOut(BaseModel):
+    thread_id: str
+    desired_hash: Optional[str] = None
+    materialized_hash: Optional[str] = None
+    status: str
+    materialized_root: Optional[str] = None
+    last_error: Optional[str] = None
+    updated_at: dt.datetime
+
+
 class ProviderOut(BaseModel):
     id: str
     name: str

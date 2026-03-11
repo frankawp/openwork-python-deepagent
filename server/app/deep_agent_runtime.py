@@ -17,6 +17,7 @@ from .daytona_backend import (
 )
 from .model_catalog import DEFAULT_MODEL_ID, MODELS
 from .models import AppSetting, GlobalApiKey
+from .skills_service import get_runtime_skill_paths
 from .system_prompt import build_system_prompt
 
 DEEPSEEK_CHAT_MODEL_ID = "deepseek-chat"
@@ -114,6 +115,7 @@ def _get_model_instance(model_id: str | None) -> BaseChatModel:
 def create_runtime(
     thread_id: str,
     model_id: str | None = None,
+    skills_enabled: bool = True,
 ) -> Any:
     model = _get_model_instance(model_id)
     checkpointer = MySQLSaver()
@@ -127,7 +129,16 @@ def create_runtime(
     )
     backend = daytona_context.backend
 
-    skills_paths: list[str] = []
+    db = SessionLocal()
+    try:
+        skills_paths = get_runtime_skill_paths(
+            db,
+            thread_id=thread_id,
+            skills_enabled=skills_enabled,
+        )
+    finally:
+        db.close()
+
     system_prompt = build_system_prompt(daytona_context.workspace_root)
 
     agent = create_deep_agent(

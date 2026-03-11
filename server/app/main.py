@@ -11,6 +11,8 @@ from .api import admin as admin_router
 from .api import agent as agent_router
 from .api import auth as auth_router
 from .api import models as models_router
+from .api import skills as skills_router
+from .api import thread_skills as thread_skills_router
 from .api import threads as threads_router
 from .api import workspace as workspace_router
 from .auth import hash_password
@@ -18,8 +20,10 @@ from .config import load_config
 from .db import SessionLocal
 from .model_catalog import DEFAULT_MODEL_ID
 from .models import AppSetting, User
+from .skill_materialization_worker import SkillMaterializationWorker
 
 app = FastAPI(title="Openwork Server")
+_skill_worker = SkillMaterializationWorker()
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,10 +44,12 @@ app.include_router(threads_router.router)
 app.include_router(models_router.router)
 app.include_router(workspace_router.router)
 app.include_router(agent_router.router)
+app.include_router(skills_router.router)
+app.include_router(thread_skills_router.router)
 
 
 @app.on_event("startup")
-def startup() -> None:
+async def startup() -> None:
     cfg = load_config()
 
     # Ensure workspace root exists
@@ -74,3 +80,10 @@ def startup() -> None:
     dist = Path("web/dist")
     if dist.exists():
         app.mount("/", StaticFiles(directory=dist, html=True), name="static")
+
+    await _skill_worker.start()
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    await _skill_worker.stop()

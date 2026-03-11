@@ -29,6 +29,7 @@ interface AppState {
 
   // Kanban view state
   showKanbanView: boolean
+  showSkillsView: boolean
   showSubagentsInKanban: boolean
   threadCreation: ThreadCreationState
 
@@ -59,6 +60,7 @@ interface AppState {
   // Kanban actions
   setShowKanbanView: (show: boolean) => void
   setShowSubagentsInKanban: (show: boolean) => void
+  setShowSkillsView: (show: boolean) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -71,6 +73,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settingsOpen: false,
   sidebarCollapsed: false,
   showKanbanView: false,
+  showSkillsView: false,
   showSubagentsInKanban: true,
   threadCreation: {
     status: "idle",
@@ -103,6 +106,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         threads: [thread, ...state.threads],
         currentThreadId: thread.thread_id,
         showKanbanView: false,
+        showSkillsView: false,
         threadCreation: {
           status: "idle",
           startedAt: null,
@@ -126,7 +130,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectThread: async (threadId: string) => {
     // Just update currentThreadId - ThreadContext handles per-thread state
     // Also close kanban view when selecting a thread
-    set({ currentThreadId: threadId, showKanbanView: false })
+    set({ currentThreadId: threadId, showKanbanView: false, showSkillsView: false })
   },
 
   deleteThread: async (threadId: string) => {
@@ -223,7 +227,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Kanban actions
   setShowKanbanView: (show: boolean) => {
     if (show) {
-      set({ showKanbanView: true, currentThreadId: null })
+      set({ showKanbanView: true, showSkillsView: false, currentThreadId: null })
     } else {
       set({ showKanbanView: false })
     }
@@ -231,5 +235,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setShowSubagentsInKanban: (show: boolean) => {
     set({ showSubagentsInKanban: show })
+  },
+
+  setShowSkillsView: (show: boolean) => {
+    if (show) {
+      set({ showSkillsView: true, showKanbanView: false })
+    } else {
+      set({ showSkillsView: false })
+    }
   }
 }))

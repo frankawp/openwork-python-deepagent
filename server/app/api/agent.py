@@ -104,6 +104,7 @@ async def _agent_stream(payload: AgentStreamRequest) -> AsyncGenerator[str, None
             agent = create_runtime(
                 thread_id=payload.thread_id,
                 model_id=model_id,
+                skills_enabled=payload.skills_enabled,
             )
 
             config = {"configurable": {"thread_id": payload.thread_id}}
@@ -152,6 +153,7 @@ async def _agent_interrupt(payload: AgentInterruptRequest) -> AsyncGenerator[str
             agent = create_runtime(
                 thread_id=payload.thread_id,
                 model_id=model_id,
+                skills_enabled=payload.skills_enabled,
             )
             config = {"configurable": {"thread_id": payload.thread_id}}
             resume = _normalize_resume(payload.decision)

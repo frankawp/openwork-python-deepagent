@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo, useCallback } from "react"
-import { Send, Square, Loader2, AlertCircle, X, Zap, ZapOff } from "lucide-react"
+import { Send, Square, Loader2, AlertCircle, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAppStore } from "@/lib/store"
@@ -9,7 +9,7 @@ import { ModelSwitcher } from "./ModelSwitcher"
 import { WorkspacePicker } from "./WorkspacePicker"
 import { ChatTodos } from "./ChatTodos"
 import { ContextUsageIndicator } from "./ContextUsageIndicator"
-import { cn } from "@/lib/utils"
+import { ThreadSkillsPicker } from "./ThreadSkillsPicker"
 import type { Message } from "@/types"
 
 interface AgentStreamValues {
@@ -389,22 +389,11 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
                 <div className="w-px h-4 bg-border" />
                 <WorkspacePicker threadId={threadId} />
                 <div className="w-px h-4 bg-border" />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSkillsEnabled(!skillsEnabled)}
-                  className={cn(
-                    "h-7 gap-1.5 px-2 text-xs",
-                    skillsEnabled
-                      ? "text-status-nominal hover:text-status-nominal"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                  title={skillsEnabled ? "Skills enabled" : "Skills disabled"}
-                >
-                  {skillsEnabled ? <Zap className="size-3.5" /> : <ZapOff className="size-3.5" />}
-                  <span>Skills</span>
-                </Button>
+                <ThreadSkillsPicker
+                  threadId={threadId}
+                  skillsEnabled={skillsEnabled}
+                  setSkillsEnabled={setSkillsEnabled}
+                />
               </div>
               {tokenUsage && (
                 <ContextUsageIndicator tokenUsage={tokenUsage} modelId={currentModel} />

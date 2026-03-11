@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shlex
 from dataclasses import dataclass
 from typing import Any
@@ -121,6 +122,24 @@ def delete_daytona_sandbox_for_thread(thread_id: str) -> None:
         )
 
 
+def _ensure_ssl_cert_file_env() -> None:
+    # Some urllib3 environments don't resolve a usable system CA store by default.
+    # Fall back to certifi to keep TLS verification enabled for Daytona API calls.
+    if os.environ.get("SSL_CERT_FILE"):
+        return
+    try:
+        import certifi
+    except Exception:
+        return
+
+    ca_bundle = certifi.where()
+    if not ca_bundle:
+        return
+    os.environ["SSL_CERT_FILE"] = ca_bundle
+    if not os.environ.get("REQUESTS_CA_BUNDLE"):
+        os.environ["REQUESTS_CA_BUNDLE"] = ca_bundle
+
+
 def _create_daytona_client():
     try:
         from daytona import Daytona
@@ -128,6 +147,8 @@ def _create_daytona_client():
         raise RuntimeError(
             "daytona SDK is not installed. Install server dependencies first."
         ) from e
+
+    _ensure_ssl_cert_file_env()
 
     try:
         return Daytona()

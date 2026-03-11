@@ -56,6 +56,23 @@ from app.db import SessionLocal  # noqa: E402
 from app.models import Thread  # noqa: E402
 
 
+def _ensure_ssl_cert_file_env() -> None:
+    # Keep TLS verification enabled while ensuring urllib3 can find CA roots.
+    if os.environ.get("SSL_CERT_FILE"):
+        return
+    try:
+        import certifi
+    except Exception:
+        return
+
+    ca_bundle = certifi.where()
+    if not ca_bundle:
+        return
+    os.environ["SSL_CERT_FILE"] = ca_bundle
+    if not os.environ.get("REQUESTS_CA_BUNDLE"):
+        os.environ["REQUESTS_CA_BUNDLE"] = ca_bundle
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -201,6 +218,7 @@ def _sandbox_brief(sandbox: Any) -> dict[str, Any]:
 
 
 def _run_audit(args: argparse.Namespace) -> dict[str, Any]:
+    _ensure_ssl_cert_file_env()
     now = datetime.now(timezone.utc)
     threshold = now - timedelta(days=max(args.orphan_days, 0))
 

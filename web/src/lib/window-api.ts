@@ -76,6 +76,29 @@ export function attachWindowApi() {
     updated_at: thread?.updated_at ? new Date(thread.updated_at) : new Date()
   })
 
+  const normalizeSkill = (skill: any) => ({
+    ...skill,
+    created_at: skill?.created_at ? new Date(skill.created_at) : new Date(),
+    updated_at: skill?.updated_at ? new Date(skill.updated_at) : new Date()
+  })
+
+  const normalizeSkillFile = (file: any) => ({
+    ...file,
+    updated_at: file?.updated_at ? new Date(file.updated_at) : new Date()
+  })
+
+  const normalizeThreadSkillBinding = (binding: any) => ({
+    ...binding,
+    created_at: binding?.created_at ? new Date(binding.created_at) : new Date(),
+    updated_at: binding?.updated_at ? new Date(binding.updated_at) : new Date(),
+    skill: normalizeSkill(binding?.skill)
+  })
+
+  const normalizeMaterializationState = (state: any) => ({
+    ...state,
+    updated_at: state?.updated_at ? new Date(state.updated_at) : new Date()
+  })
+
   const api = {
     auth: {
       login: (email: string, password: string) =>
@@ -186,6 +209,61 @@ export function attachWindowApi() {
         apiFetch("/models/api-key", { method: "POST", body: JSON.stringify({ provider, apiKey }) }),
       getApiKey: (provider: string) => apiFetch(`/models/api-key/${provider}`),
       deleteApiKey: (provider: string) => apiFetch(`/models/api-key/${provider}`, { method: "DELETE" })
+    },
+    skills: {
+      list: () => apiFetch("/skills").then((items: any[]) => items.map(normalizeSkill)),
+      get: (skillId: string) => apiFetch(`/skills/${skillId}`).then(normalizeSkill),
+      create: (payload: {
+        key: string
+        name: string
+        description: string
+        enabled?: boolean
+      }) =>
+        apiFetch("/skills", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        }).then(normalizeSkill),
+      update: (
+        skillId: string,
+        payload: {
+          name?: string
+          description?: string
+          enabled?: boolean
+        }
+      ) =>
+        apiFetch(`/skills/${skillId}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload)
+        }).then(normalizeSkill),
+      delete: (skillId: string) => apiFetch(`/skills/${skillId}`, { method: "DELETE" }),
+      listFiles: (skillId: string) =>
+        apiFetch(`/skills/${skillId}/files`).then((files: any[]) => files.map(normalizeSkillFile)),
+      upsertFile: (skillId: string, payload: { path: string; content: string }) =>
+        apiFetch(`/skills/${skillId}/files`, {
+          method: "PUT",
+          body: JSON.stringify(payload)
+        }).then(normalizeSkillFile),
+      deleteFile: (skillId: string, path: string) =>
+        apiFetch(`/skills/${skillId}/files?path=${encodeURIComponent(path)}`, {
+          method: "DELETE"
+        })
+    },
+    threadSkills: {
+      list: (threadId: string) =>
+        apiFetch(`/thread-skills/${threadId}`).then((items: any[]) =>
+          items.map(normalizeThreadSkillBinding)
+        ),
+      set: (threadId: string, skillIds: string[]) =>
+        apiFetch(`/thread-skills/${threadId}`, {
+          method: "PUT",
+          body: JSON.stringify({ skill_ids: skillIds })
+        }).then((items: any[]) => items.map(normalizeThreadSkillBinding)),
+      remove: (threadId: string, skillId: string) =>
+        apiFetch(`/thread-skills/${threadId}/${skillId}`, {
+          method: "DELETE"
+        }),
+      getMaterializationState: (threadId: string) =>
+        apiFetch(`/thread-skills/${threadId}/materialization`).then(normalizeMaterializationState)
     },
     workspace: {
       get: (threadId?: string) => {

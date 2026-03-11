@@ -131,3 +131,44 @@ export interface GrepMatch {
   line: number
   text: string
 }
+
+export interface Skill {
+  id: string
+  user_id: string
+  key: string
+  name: string
+  description: string
+  enabled: boolean
+  created_at: Date
+  updated_at: Date
+}
+
+export interface SkillFile {
+  id: string
+  skill_id: string
+  path: string
+  checksum: string
+  updated_at: Date
+  content: string
+}
+
+export interface ThreadSkillBinding {
+  id: string
+  thread_id: string
+  skill_id: string
+  position: number
+  enabled: boolean
+  created_at: Date
+  updated_at: Date
+  skill: Skill
+}
+
+export interface SkillMaterializationState {
+  thread_id: string
+  desired_hash?: string | null
+  materialized_hash?: string | null
+  status: "dirty" | "syncing" | "ready" | "failed"
+  materialized_root?: string | null
+  last_error?: string | null
+  updated_at: Date
+}
