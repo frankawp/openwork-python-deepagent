@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..auth import hash_password
+from ..builtin_skill_loader import ensure_builtin_skills_for_user
 from ..deps import get_db, require_admin
 from ..models import User
 from ..schemas import UserCreate, UserOut
@@ -24,6 +25,8 @@ def create_user(
         is_admin=payload.is_admin,
     )
     db.add(user)
+    db.flush()
+    ensure_builtin_skills_for_user(db, user_id=user.id)
     db.commit()
     db.refresh(user)
     return UserOut(

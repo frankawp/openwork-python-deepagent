@@ -16,6 +16,7 @@ from .api import thread_skills as thread_skills_router
 from .api import threads as threads_router
 from .api import workspace as workspace_router
 from .auth import hash_password
+from .builtin_skill_loader import ensure_builtin_skills_for_user
 from .config import load_config
 from .db import SessionLocal
 from .model_catalog import DEFAULT_MODEL_ID
@@ -71,6 +72,15 @@ async def startup() -> None:
         default_model = db.get(AppSetting, "default_model")
         if not default_model:
             db.add(AppSetting(key="default_model", value=DEFAULT_MODEL_ID))
+            db.commit()
+
+        users = db.query(User).all()
+        created_any = False
+        for row in users:
+            created = ensure_builtin_skills_for_user(db, user_id=row.id)
+            if created:
+                created_any = True
+        if created_any:
             db.commit()
 
     finally:
