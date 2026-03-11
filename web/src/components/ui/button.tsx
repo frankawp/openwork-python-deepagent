@@ -4,15 +4,17 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring/60 shadow-sm",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default:
+          "bg-primary text-primary-foreground hover:bg-primary/94 hover:shadow-sm",
         destructive: "bg-destructive text-white hover:bg-destructive/90",
-        outline: "border border-border bg-transparent hover:bg-background-interactive",
+        outline:
+          "border border-border bg-background/65 hover:bg-background-interactive/60 hover:border-border-emphasis",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-background-interactive",
+        ghost: "hover:bg-background-interactive/55",
         link: "text-primary underline-offset-4 hover:underline",
         // Status variants
         nominal: "bg-status-nominal text-background hover:bg-status-nominal/90",

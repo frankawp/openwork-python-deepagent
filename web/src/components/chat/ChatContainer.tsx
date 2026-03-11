@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo, useCallback } from "react"
-import { Send, Square, Loader2, AlertCircle, X } from "lucide-react"
+import { Send, Square, Loader2, AlertCircle, X, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAppStore } from "@/lib/store"
@@ -167,6 +167,8 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     return results
   }, [displayMessages])
 
+  const latestMessageId = displayMessages.length > 0 ? displayMessages[displayMessages.length - 1]?.id : null
+
   // Get the actual scrollable viewport element from Radix ScrollArea
   const getViewport = useCallback((): HTMLDivElement | null => {
     return scrollRef.current?.querySelector(
@@ -290,15 +292,32 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
   }
 
   return (
-    <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Messages */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="p-4">
-          <div className="max-w-3xl mx-auto space-y-4">
+        <div className="px-5 py-6 md:px-8">
+          <div className="mx-auto max-w-4xl space-y-5">
             {displayMessages.length === 0 && !isLoading && (
-              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                <div className="text-section-header mb-2">NEW THREAD</div>
-                <div className="text-sm">Start a conversation with the agent</div>
+              <div className="mx-auto max-w-2xl rounded-2xl border border-border/75 bg-card/75 p-8 text-center text-muted-foreground shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/12 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">
+                  <Sparkles className="size-3.5" />
+                  New Conversation
+                </div>
+                <div className="text-xl font-semibold text-foreground">Ask the agent to build with you</div>
+                <div className="mt-2 text-sm">
+                  Describe your goal, constraints, and expected output. The agent will plan and execute step by step.
+                </div>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs">
+                  <span className="rounded-full border border-border/80 bg-background/60 px-3 py-1">
+                    UI redesign
+                  </span>
+                  <span className="rounded-full border border-border/80 bg-background/60 px-3 py-1">
+                    Bug investigation
+                  </span>
+                  <span className="rounded-full border border-border/80 bg-background/60 px-3 py-1">
+                    Performance tuning
+                  </span>
+                </div>
               </div>
             )}
 
@@ -306,6 +325,9 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
               <MessageBubble
                 key={message.id}
                 message={message}
+                isStreaming={Boolean(
+                  isLoading && latestMessageId && message.id === latestMessageId && message.role === "assistant"
+                )}
                 toolResults={toolResults}
                 pendingApproval={pendingApproval}
                 onApprovalDecision={handleApprovalDecision}
@@ -315,9 +337,9 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
             {/* Streaming indicator and inline TODOs */}
             {isLoading && (
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                  <Loader2 className="size-4 animate-spin" />
-                  Agent is thinking...
+                <div className="flex items-center gap-2 rounded-xl border border-border/75 bg-card/75 px-3 py-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin text-primary" />
+                  Agent is drafting a response...
                 </div>
                 {todos.length > 0 && <ChatTodos todos={todos} />}
               </div>
@@ -325,20 +347,20 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
 
             {/* Error state */}
             {threadError && !isLoading && (
-              <div className="flex items-start gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-4">
-                <AlertCircle className="size-5 text-destructive shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 rounded-xl border border-destructive/45 bg-destructive/10 p-4 shadow-[0_8px_18px_rgba(127,29,29,0.12)]">
+                <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-destructive text-sm">Agent Error</div>
-                  <div className="text-sm text-muted-foreground mt-1 break-words">
+                  <div className="text-sm font-medium text-destructive">Agent Error</div>
+                  <div className="mt-1 break-words text-sm text-muted-foreground">
                     {threadError}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-2">
+                  <div className="mt-2 text-xs text-muted-foreground">
                     You can try sending a new message to continue the conversation.
                   </div>
                 </div>
                 <button
                   onClick={handleDismissError}
-                  className="shrink-0 rounded p-1 hover:bg-destructive/20 transition-colors"
+                  className="shrink-0 rounded-md p-1 transition-colors hover:bg-destructive/20"
                   aria-label="Dismiss error"
                 >
                   <X className="size-4 text-muted-foreground" />
@@ -350,24 +372,24 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       </ScrollArea>
 
       {/* Input */}
-      <div className="border-t border-border p-4">
-        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-end gap-2">
+      <div className="border-t border-border/70 bg-background/60 px-5 py-4 backdrop-blur-xl md:px-8">
+        <form onSubmit={handleSubmit} className="mx-auto max-w-4xl">
+          <div className="rounded-2xl border border-border/80 bg-card/85 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.08)]">
+            <div className="flex items-end gap-3">
               <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Message..."
+                placeholder="Message the agent..."
                 disabled={isLoading}
-                className="flex-1 min-w-0 resize-none rounded-sm border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                className="min-w-0 flex-1 resize-none rounded-xl border border-border/85 bg-background/72 px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/60 disabled:opacity-50"
                 rows={1}
                 style={{ minHeight: "48px", maxHeight: "200px" }}
               />
-              <div className="flex items-center justify-center shrink-0 h-12">
+              <div className="flex h-12 shrink-0 items-center justify-center">
                 {isLoading ? (
-                  <Button type="button" variant="ghost" size="icon" onClick={handleCancel}>
+                  <Button type="button" variant="outline" size="icon" onClick={handleCancel}>
                     <Square className="size-4" />
                   </Button>
                 ) : (
@@ -376,19 +398,19 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
                     variant="default"
                     size="icon"
                     disabled={!input.trim()}
-                    className="rounded-md"
+                    className="rounded-xl"
                   >
                     <Send className="size-4" />
                   </Button>
                 )}
               </div>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <ModelSwitcher threadId={threadId} />
-                <div className="w-px h-4 bg-border" />
+                <div className="h-4 w-px bg-border" />
                 <WorkspacePicker threadId={threadId} />
-                <div className="w-px h-4 bg-border" />
+                <div className="h-4 w-px bg-border" />
                 <ThreadSkillsPicker
                   threadId={threadId}
                   skillsEnabled={skillsEnabled}
@@ -399,6 +421,9 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
                 <ContextUsageIndicator tokenUsage={tokenUsage} modelId={currentModel} />
               )}
             </div>
+          </div>
+          <div className="mt-2 px-1 text-[11px] text-muted-foreground">
+            Press Enter to send, Shift + Enter for newline.
           </div>
         </form>
       </div>

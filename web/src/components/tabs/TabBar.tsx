@@ -25,7 +25,7 @@ export function TabBar({
   return (
     <div
       className={cn(
-        "flex items-center h-9 border-b border-border bg-sidebar overflow-x-auto scrollbar-hide",
+        "scrollbar-hide flex h-9 items-center overflow-x-auto bg-background/65",
         className
       )}
     >
@@ -33,10 +33,10 @@ export function TabBar({
       <button
         onClick={() => setActiveTab("agent")}
         className={cn(
-          "flex items-center gap-2 px-4 h-full text-sm font-medium transition-colors shrink-0 border-r border-border",
+          "flex h-full shrink-0 items-center gap-2 border-r border-border/70 px-4 text-sm font-medium transition-all",
           activeTab === "agent"
-            ? "bg-primary/15 text-primary border-b-2 border-b-primary"
-            : "text-muted-foreground hover:text-foreground hover:bg-background-interactive"
+            ? "bg-primary/18 text-foreground"
+            : "text-muted-foreground hover:bg-background-interactive/55 hover:text-foreground"
         )}
       >
         <Bot className="size-4" />
@@ -86,10 +86,10 @@ function FileTab({ file, isActive, onSelect, onClose }: FileTabProps): React.JSX
       onClick={onSelect}
       onMouseDown={handleMouseDown}
       className={cn(
-        "group flex items-center gap-2 px-3 h-full text-sm transition-colors shrink-0 border-r border-border max-w-[200px]",
+        "group flex h-full max-w-[220px] shrink-0 items-center gap-2 border-r border-border/70 px-3 text-sm transition-all",
         isActive
-          ? "bg-background text-foreground border-b-2 border-b-primary"
-          : "text-muted-foreground hover:text-foreground hover:bg-background-interactive"
+          ? "bg-card/70 text-foreground"
+          : "text-muted-foreground hover:bg-background-interactive/55 hover:text-foreground"
       )}
       title={file.path}
     >
@@ -98,7 +98,7 @@ function FileTab({ file, isActive, onSelect, onClose }: FileTabProps): React.JSX
       <button
         onClick={handleClose}
         className={cn(
-          "size-4 flex items-center justify-center rounded-sm hover:bg-background-interactive transition-colors",
+          "flex size-4 items-center justify-center rounded-md transition-colors hover:bg-background-interactive",
           isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         )}
       >

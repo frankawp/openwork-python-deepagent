@@ -21,7 +21,7 @@ export function TabbedPanel({ threadId, showTabBar = true }: TabbedPanelProps): 
       {showTabBar && <TabBar />}
 
       {/* Subtle gradient fade from titlebar */}
-      <div className="h-1 shrink-0 bg-gradient-to-b from-sidebar/80 to-transparent" />
+      <div className="h-1 shrink-0 bg-gradient-to-b from-primary/18 to-transparent" />
 
       {/* Content Area */}
       <div className="flex flex-1 flex-col min-h-0 overflow-hidden">

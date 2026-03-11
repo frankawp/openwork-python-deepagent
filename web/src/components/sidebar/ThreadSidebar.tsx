@@ -46,6 +46,8 @@ function ThreadListItem({
   isSelected,
   isEditing,
   editingTitle,
+  disabled = false,
+  isDeleting = false,
   onSelect,
   onDelete,
   onStartEditing,
@@ -57,6 +59,8 @@ function ThreadListItem({
   isSelected: boolean
   isEditing: boolean
   editingTitle: string
+  disabled?: boolean
+  isDeleting?: boolean
   onSelect: () => void
   onDelete: () => void
   onStartEditing: () => void
@@ -69,18 +73,31 @@ function ThreadListItem({
       <ContextMenuTrigger asChild>
         <div
           className={cn(
-            "group flex items-center gap-2 rounded-sm px-3 py-2 cursor-pointer transition-colors overflow-hidden",
+            "group flex cursor-pointer items-center gap-2 overflow-hidden rounded-lg border border-transparent px-3 py-2.5 transition-all",
+            disabled && "cursor-not-allowed opacity-65",
+            isDeleting && "border-status-info/35 bg-status-info/10",
             isSelected
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "hover:bg-sidebar-accent/50"
+              ? "border-primary/30 bg-sidebar-accent/95 text-sidebar-accent-foreground shadow-[0_4px_10px_rgba(15,23,42,0.08)]"
+              : "hover:border-border/70 hover:bg-sidebar-accent/55"
           )}
           onClick={() => {
-            if (!isEditing) {
+            if (!isEditing && !disabled) {
               onSelect()
             }
           }}
+          onContextMenu={(e) => {
+            if (disabled) {
+              e.preventDefault()
+              e.stopPropagation()
+            }
+          }}
+          aria-disabled={disabled}
         >
-          <ThreadStatusIcon threadId={thread.thread_id} />
+          {isDeleting ? (
+            <Loader2 className="size-4 shrink-0 text-status-info animate-spin" />
+          ) : (
+            <ThreadStatusIcon threadId={thread.thread_id} />
+          )}
           <div className="flex-1 min-w-0 overflow-hidden">
             {isEditing ? (
               <input
@@ -92,7 +109,7 @@ function ThreadListItem({
                   if (e.key === "Enter") onSaveTitle()
                   if (e.key === "Escape") onCancelEditing()
                 }}
-                className="w-full bg-background border border-border rounded px-1 py-0.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+                className="w-full rounded-md border border-border bg-background/80 px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring/60"
                 autoFocus
                 onClick={(e) => e.stopPropagation()}
               />
@@ -102,7 +119,7 @@ function ThreadListItem({
                   {thread.title || truncate(thread.thread_id, 20)}
                 </div>
                 <div className="text-[10px] text-muted-foreground truncate">
-                  {formatRelativeTime(thread.updated_at)}
+                  {isDeleting ? "Deleting thread..." : formatRelativeTime(thread.updated_at)}
                 </div>
               </>
             )}
@@ -110,23 +127,25 @@ function ThreadListItem({
           <Button
             variant="ghost"
             size="icon-sm"
-            className="opacity-0 group-hover:opacity-100 shrink-0"
+            className="shrink-0 opacity-0 group-hover:opacity-100"
             onClick={(e) => {
+              if (disabled) return
               e.stopPropagation()
               onDelete()
             }}
+            disabled={disabled}
           >
             <Trash2 className="size-3" />
           </Button>
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onClick={onStartEditing}>
+        <ContextMenuItem onClick={onStartEditing} disabled={disabled}>
           <Pencil className="size-4 mr-2" />
           Rename
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem variant="destructive" onClick={onDelete}>
+        <ContextMenuItem variant="destructive" onClick={onDelete} disabled={disabled}>
           <Trash2 className="size-4 mr-2" />
           Delete
         </ContextMenuItem>
@@ -152,6 +171,8 @@ export function ThreadSidebar(): React.JSX.Element {
 
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState("")
+  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const startEditing = (threadId: string, currentTitle: string): void => {
     setEditingThreadId(threadId)
@@ -172,6 +193,7 @@ export function ThreadSidebar(): React.JSX.Element {
   }
 
   const handleNewThread = async (): Promise<void> => {
+    setDeleteError(null)
     try {
       await createThread({ title: `Thread ${new Date().toLocaleDateString()}` })
     } catch (error) {
@@ -179,19 +201,42 @@ export function ThreadSidebar(): React.JSX.Element {
     }
   }
 
+  const handleDeleteThread = async (threadId: string): Promise<void> => {
+    if (deletingThreadId) return
+    setDeleteError(null)
+    setDeletingThreadId(threadId)
+    if (editingThreadId === threadId) {
+      cancelEditing()
+    }
+    try {
+      await deleteThread(threadId)
+    } catch (error) {
+      const message = (error as { message?: string })?.message || "Failed to delete thread. Please retry."
+      console.error("[ThreadSidebar] Failed to delete thread:", error)
+      setDeleteError(message)
+    } finally {
+      setDeletingThreadId(null)
+    }
+  }
+
   const isCreating = threadCreation.status === "creating"
+  const isDeleting = deletingThreadId !== null
+  const isBusy = isCreating || isDeleting
   const hasCreateError = threadCreation.status === "failed"
 
   return (
-    <aside className="flex h-full w-full flex-col border-r border-border bg-sidebar overflow-hidden">
+    <aside className="flex h-full w-full flex-col overflow-hidden border-r border-border/70 bg-sidebar/96 backdrop-blur-xl">
       {/* New Thread Button - with dynamic safe area padding when zoomed out */}
-      <div className="p-2" style={{ paddingTop: "calc(8px + var(--sidebar-safe-padding, 0px))" }}>
+      <div className="space-y-2 p-3" style={{ paddingTop: "calc(10px + var(--sidebar-safe-padding, 0px))" }}>
+        <div className="px-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+          Threads
+        </div>
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="w-full justify-start gap-2"
+          className="h-9 w-full justify-start gap-2 border-border/80 bg-background/45 text-foreground hover:bg-background-interactive/75"
           onClick={handleNewThread}
-          disabled={isCreating}
+          disabled={isBusy}
         >
           {isCreating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
           {isCreating ? "Preparing thread..." : "New Thread"}
@@ -200,9 +245,9 @@ export function ThreadSidebar(): React.JSX.Element {
 
       {/* Thread List */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="p-2 space-y-1 overflow-hidden">
+        <div className="space-y-1 overflow-hidden px-3 pb-3">
           {isCreating && (
-            <div className="flex items-center gap-2 rounded-sm px-3 py-2 bg-sidebar-accent/40 text-sidebar-foreground">
+            <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-sidebar-accent/50 px-3 py-2.5 text-sidebar-foreground">
               <Loader2 className="size-4 shrink-0 text-status-info animate-spin" />
               <div className="min-w-0">
                 <div className="text-sm truncate">Preparing thread...</div>
@@ -214,11 +259,11 @@ export function ThreadSidebar(): React.JSX.Element {
           )}
 
           {hasCreateError && (
-            <div className="rounded-sm px-3 py-2 border border-status-error/40 bg-status-error/10">
+            <div className="rounded-lg border border-status-critical/35 bg-status-critical/10 px-3 py-2.5">
               <div className="flex items-start gap-2">
-                <AlertCircle className="size-4 mt-0.5 shrink-0 text-status-error" />
+                <AlertCircle className="mt-0.5 size-4 shrink-0 text-status-critical" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs text-status-error font-medium">Thread creation failed</div>
+                  <div className="text-xs font-medium text-status-critical">Thread creation failed</div>
                   <div className="text-[10px] text-muted-foreground truncate">
                     {threadCreation.error || "Please retry"}
                   </div>
@@ -230,6 +275,18 @@ export function ThreadSidebar(): React.JSX.Element {
             </div>
           )}
 
+          {deleteError && !isDeleting && (
+            <div className="rounded-lg border border-status-critical/35 bg-status-critical/10 px-3 py-2.5">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 size-4 shrink-0 text-status-critical" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium text-status-critical">Thread deletion failed</div>
+                  <div className="text-[10px] text-muted-foreground truncate">{deleteError}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {threads.map((thread) => (
             <ThreadListItem
               key={thread.thread_id}
@@ -237,8 +294,10 @@ export function ThreadSidebar(): React.JSX.Element {
               isSelected={currentThreadId === thread.thread_id}
               isEditing={editingThreadId === thread.thread_id}
               editingTitle={editingTitle}
+              disabled={isBusy}
+              isDeleting={deletingThreadId === thread.thread_id}
               onSelect={() => selectThread(thread.thread_id)}
-              onDelete={() => deleteThread(thread.thread_id)}
+              onDelete={() => handleDeleteThread(thread.thread_id)}
               onStartEditing={() => startEditing(thread.thread_id, thread.title || "")}
               onSaveTitle={saveTitle}
               onCancelEditing={cancelEditing}
@@ -247,7 +306,7 @@ export function ThreadSidebar(): React.JSX.Element {
           ))}
 
           {threads.length === 0 && !isCreating && (
-            <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border/70 px-3 py-8 text-center text-sm text-muted-foreground">
               No threads yet
             </div>
           )}
@@ -255,13 +314,13 @@ export function ThreadSidebar(): React.JSX.Element {
       </ScrollArea>
 
       {/* Overview Toggle */}
-      <div className="p-2 border-t border-border">
+      <div className="border-t border-border/70 p-3">
         <Button
           variant="ghost"
           size="sm"
           className={cn(
-            "w-full justify-start gap-2",
-            showSkillsView && "bg-sidebar-accent text-sidebar-accent-foreground"
+            "h-8 w-full justify-start gap-2 rounded-lg",
+            showSkillsView && "bg-sidebar-accent/85 text-sidebar-accent-foreground"
           )}
           onClick={() => setShowSkillsView(true)}
         >
@@ -272,8 +331,8 @@ export function ThreadSidebar(): React.JSX.Element {
           variant="ghost"
           size="sm"
           className={cn(
-            "w-full justify-start gap-2 mt-1",
-            showKanbanView && "bg-sidebar-accent text-sidebar-accent-foreground"
+            "mt-1 h-8 w-full justify-start gap-2 rounded-lg",
+            showKanbanView && "bg-sidebar-accent/85 text-sidebar-accent-foreground"
           )}
           onClick={() => setShowKanbanView(true)}
         >

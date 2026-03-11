@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ant-design/x-markdown": "^2.3.0",
+    "@ant-design/x-skill": "^2.3.0",
     "@langchain/langgraph-sdk": "^1.5.3",
     "@radix-ui/react-context-menu": "^2.2.16",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -28,9 +30,7 @@
     "lucide-react": "^0.469.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.4.0",
-    "remark-gfm": "^4.0.1",
     "shiki": "^3.21.0",
     "tailwind-merge": "^2.6.0",
     "uuid": "^11.0.5",

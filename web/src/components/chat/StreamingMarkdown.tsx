@@ -1,6 +1,5 @@
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import { memo } from "react"
+import { MarkdownRenderer } from "@/components/markdown/MarkdownRenderer"
 
 interface StreamingMarkdownProps {
   children: string
@@ -11,12 +10,5 @@ export const StreamingMarkdown = memo(function StreamingMarkdown({
   children,
   isStreaming = false
 }: StreamingMarkdownProps): React.JSX.Element {
-  return (
-    <div className="streaming-markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
-      {isStreaming && (
-        <span className="inline-block w-2 h-4 ml-0.5 bg-foreground/70 animate-pulse" />
-      )}
-    </div>
-  )
+  return <MarkdownRenderer content={children} isStreaming={isStreaming} />
 })

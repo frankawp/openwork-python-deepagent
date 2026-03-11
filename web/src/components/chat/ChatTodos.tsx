@@ -37,16 +37,16 @@ export function ChatTodos({ todos }: ChatTodosProps): React.JSX.Element | null {
   const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
 
   return (
-    <div className="rounded-sm border border-border bg-background-elevated overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-border/75 bg-background-elevated/88 shadow-[0_6px_14px_rgba(15,23,42,0.08)]">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+      <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
         <ListTodo className="size-4 text-status-info" />
         <span className="text-xs font-medium">Agent Tasks</span>
         <span className="ml-auto text-xs text-muted-foreground">
           {completedCount}/{totalCount}
         </span>
         {/* Mini progress bar */}
-        <div className="w-16 h-1 rounded-full bg-background overflow-hidden">
+        <div className="h-1 w-16 overflow-hidden rounded-full bg-background">
           <div
             className="h-full bg-status-nominal transition-all duration-300"
             style={{ width: `${progress}%` }}
@@ -56,7 +56,7 @@ export function ChatTodos({ todos }: ChatTodosProps): React.JSX.Element | null {
 
       {/* Active todos */}
       {activeTodos.length > 0 && (
-        <div className="px-3 py-2 space-y-1.5">
+        <div className="space-y-1.5 px-3 py-2">
           {activeTodos.map((todo) => {
             const config = STATUS_CONFIG[todo.status]
             const Icon = config.icon
@@ -72,7 +72,7 @@ export function ChatTodos({ todos }: ChatTodosProps): React.JSX.Element | null {
 
       {/* Completed summary (collapsed) */}
       {completedCount > 0 && activeTodos.length > 0 && (
-        <div className="px-3 py-1.5 text-xs text-muted-foreground border-t border-border bg-background">
+        <div className="border-t border-border/70 bg-background px-3 py-1.5 text-xs text-muted-foreground">
           {completedCount} task{completedCount !== 1 ? "s" : ""} completed
         </div>
       )}

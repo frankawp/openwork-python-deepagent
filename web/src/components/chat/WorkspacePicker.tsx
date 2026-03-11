@@ -27,8 +27,8 @@ export function WorkspacePicker({ threadId }: WorkspacePickerProps): React.JSX.E
   }, [threadId])
 
   return (
-    <div className="h-7 px-2 text-xs gap-1.5 inline-flex items-center text-foreground max-w-[260px]">
-      <Folder className="size-3.5 shrink-0" />
+    <div className="inline-flex h-7 max-w-[280px] items-center gap-1.5 rounded-full border border-border/75 bg-background/55 px-2.5 text-xs text-foreground">
+      <Folder className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="truncate" title={workspacePath || undefined}>
         {workspacePath || "Sandbox workspace"}
       </span>

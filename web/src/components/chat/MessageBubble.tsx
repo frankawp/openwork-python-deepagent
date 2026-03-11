@@ -38,8 +38,8 @@ export function MessageBubble({
   }
 
   const getLabel = (): string => {
-    if (isUser) return "YOU"
-    return "AGENT"
+    if (isUser) return "You"
+    return "Agent"
   }
 
   const renderContent = (): React.ReactNode => {
@@ -90,11 +90,11 @@ export function MessageBubble({
   }
 
   return (
-    <div className="flex gap-3 overflow-hidden">
+    <div className={cn("flex gap-3 overflow-hidden", isUser && "flex-row-reverse")}>
       {/* Left avatar column - shows for agent/tool */}
       <div className="w-8 shrink-0">
         {!isUser && (
-          <div className="flex size-8 items-center justify-center rounded-sm bg-status-info/10 text-status-info">
+          <div className="flex size-8 items-center justify-center rounded-xl border border-status-info/25 bg-status-info/12 text-status-info shadow-[0_4px_10px_rgba(37,99,235,0.14)]">
             {getIcon()}
           </div>
         )}
@@ -106,7 +106,12 @@ export function MessageBubble({
 
         {content && (
           <div
-            className={cn("rounded-sm p-3 overflow-hidden", isUser ? "bg-primary/10" : "bg-card")}
+            className={cn(
+              "max-w-[92%] overflow-hidden rounded-2xl border p-3.5 shadow-[0_8px_18px_rgba(15,23,42,0.08)]",
+              isUser
+                ? "ml-auto border-primary/35 bg-gradient-to-br from-primary/25 to-primary/10"
+                : "border-border/75 bg-card/86"
+            )}
           >
             {content}
           </div>
@@ -141,7 +146,7 @@ export function MessageBubble({
       {/* Right avatar column - shows for user */}
       <div className="w-8 shrink-0">
         {isUser && (
-          <div className="flex size-8 items-center justify-center rounded-sm bg-primary/10 text-primary">
+          <div className="flex size-8 items-center justify-center rounded-xl border border-primary/40 bg-primary/20 text-primary shadow-[0_4px_10px_rgba(16,163,127,0.16)]">
             {getIcon()}
           </div>
         )}

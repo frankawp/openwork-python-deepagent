@@ -51,7 +51,7 @@ function SectionHeader({
   return (
     <button
       onClick={onToggle}
-      className="flex items-center gap-2 px-3 py-2.5 text-section-header hover:bg-background-interactive transition-colors shrink-0 w-full"
+      className="flex h-10 w-full shrink-0 items-center gap-2 px-3 text-section-header transition-colors hover:bg-background-interactive/60"
       style={{ height: HEADER_HEIGHT }}
     >
       <ChevronRight
@@ -105,7 +105,7 @@ function ResizeHandle({ onDrag }: ResizeHandleProps): React.JSX.Element {
   return (
     <div
       onMouseDown={handleMouseDown}
-      className="group bg-border/50 hover:bg-primary/30 active:bg-primary/50 transition-colors cursor-row-resize flex items-center justify-center shrink-0 select-none"
+      className="group flex shrink-0 cursor-row-resize select-none items-center justify-center bg-border/45 transition-colors hover:bg-primary/35 active:bg-primary/55"
       style={{ height: HANDLE_HEIGHT }}
     >
       <GripHorizontal className="size-4 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
@@ -114,16 +114,17 @@ function ResizeHandle({ onDrag }: ResizeHandleProps): React.JSX.Element {
 }
 
 export function RightPanel(): React.JSX.Element {
-  const { currentThreadId } = useAppStore()
+  const { currentThreadId, threadCreation } = useAppStore()
+  const isCreatingThread = threadCreation.status === "creating"
   const threadState = useThreadState(currentThreadId)
-  const todos = threadState?.todos ?? []
-  const workspaceFiles = threadState?.workspaceFiles ?? []
-  const subagents = threadState?.subagents ?? []
+  const todos = isCreatingThread ? [] : (threadState?.todos ?? [])
+  const workspaceFiles = isCreatingThread ? [] : (threadState?.workspaceFiles ?? [])
+  const subagents = isCreatingThread ? [] : (threadState?.subagents ?? [])
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const [tasksOpen, setTasksOpen] = useState(true)
+  const [tasksOpen, setTasksOpen] = useState(false)
   const [filesOpen, setFilesOpen] = useState(true)
-  const [agentsOpen, setAgentsOpen] = useState(true)
+  const [agentsOpen, setAgentsOpen] = useState(false)
 
   // Store content heights in pixels (null = auto/equal distribution)
   const [tasksHeight, setTasksHeight] = useState<number | null>(null)
@@ -132,6 +133,28 @@ export function RightPanel(): React.JSX.Element {
 
   // Track drag start heights
   const dragStartHeights = useRef<{ tasks: number; files: number; agents: number } | null>(null)
+
+  // Auto-collapse/expand TASKS and AGENTS based on whether there is data to show.
+  // Expand only when data appears; collapse when data is gone.
+  const previousNeedsRef = useRef({ tasks: false, agents: false })
+  useEffect(() => {
+    const needsTasks = todos.length > 0
+    const needsAgents = subagents.length > 0
+
+    if (needsTasks && !previousNeedsRef.current.tasks) {
+      setTasksOpen(true)
+    } else if (!needsTasks) {
+      setTasksOpen(false)
+    }
+
+    if (needsAgents && !previousNeedsRef.current.agents) {
+      setAgentsOpen(true)
+    } else if (!needsAgents) {
+      setAgentsOpen(false)
+    }
+
+    previousNeedsRef.current = { tasks: needsTasks, agents: needsAgents }
+  }, [todos.length, subagents.length])
 
   // Calculate available content height
   const getAvailableContentHeight = useCallback(() => {
@@ -142,8 +165,8 @@ export function RightPanel(): React.JSX.Element {
     let used = HEADER_HEIGHT * 3
 
     // Subtract handles (only between open panels)
-    if (tasksOpen && (filesOpen || agentsOpen)) used += HANDLE_HEIGHT
-    if (filesOpen && agentsOpen) used += HANDLE_HEIGHT
+    if (filesOpen && (tasksOpen || agentsOpen)) used += HANDLE_HEIGHT
+    if (tasksOpen && agentsOpen) used += HANDLE_HEIGHT
 
     return Math.max(0, totalHeight - used)
   }, [tasksOpen, filesOpen, agentsOpen])
@@ -174,8 +197,8 @@ export function RightPanel(): React.JSX.Element {
     agentsHeight
   ])
 
-  // Handle resize between tasks and the next open section
-  const handleTasksResize = useCallback(
+  // Handle resize between FILES and the next open section (TASKS or AGENTS)
+  const handleFilesTopResize = useCallback(
     (totalDelta: number) => {
       if (!dragStartHeights.current) {
         const heights = getContentHeights()
@@ -186,55 +209,55 @@ export function RightPanel(): React.JSX.Element {
       const available = getAvailableContentHeight()
 
       // Determine which panel is being resized against
-      const otherStart = filesOpen ? start.files : start.agents
+      const otherStart = tasksOpen ? start.tasks : start.agents
 
       // Calculate new heights with proper clamping
-      let newTasksHeight = start.tasks + totalDelta
+      let newFilesHeight = start.files + totalDelta
       let newOtherHeight = otherStart - totalDelta
 
       // Clamp both to min height
-      if (newTasksHeight < MIN_CONTENT_HEIGHT) {
-        newTasksHeight = MIN_CONTENT_HEIGHT
-        newOtherHeight = otherStart + (start.tasks - MIN_CONTENT_HEIGHT)
+      if (newFilesHeight < MIN_CONTENT_HEIGHT) {
+        newFilesHeight = MIN_CONTENT_HEIGHT
+        newOtherHeight = otherStart + (start.files - MIN_CONTENT_HEIGHT)
       }
       if (newOtherHeight < MIN_CONTENT_HEIGHT) {
         newOtherHeight = MIN_CONTENT_HEIGHT
-        newTasksHeight = start.tasks + (otherStart - MIN_CONTENT_HEIGHT)
+        newFilesHeight = start.files + (otherStart - MIN_CONTENT_HEIGHT)
       }
 
       // Ensure total doesn't exceed available (accounting for third panel if open)
-      const thirdPanelHeight = filesOpen && agentsOpen ? (agentsHeight ?? available / 3) : 0
+      const thirdPanelHeight = tasksOpen && agentsOpen ? (agentsHeight ?? available / 3) : 0
       const maxForTwo = available - thirdPanelHeight
-      if (newTasksHeight + newOtherHeight > maxForTwo) {
-        const excess = newTasksHeight + newOtherHeight - maxForTwo
+      if (newFilesHeight + newOtherHeight > maxForTwo) {
+        const excess = newFilesHeight + newOtherHeight - maxForTwo
         if (totalDelta > 0) {
           newOtherHeight = Math.max(MIN_CONTENT_HEIGHT, newOtherHeight - excess)
         } else {
-          newTasksHeight = Math.max(MIN_CONTENT_HEIGHT, newTasksHeight - excess)
+          newFilesHeight = Math.max(MIN_CONTENT_HEIGHT, newFilesHeight - excess)
         }
       }
 
-      setTasksHeight(newTasksHeight)
-      if (filesOpen) {
-        setFilesHeight(newOtherHeight)
+      setFilesHeight(newFilesHeight)
+      if (tasksOpen) {
+        setTasksHeight(newOtherHeight)
       } else if (agentsOpen) {
         setAgentsHeight(newOtherHeight)
       }
 
       // Auto-collapse if below threshold
-      if (newTasksHeight < COLLAPSE_THRESHOLD) {
-        setTasksOpen(false)
+      if (newFilesHeight < COLLAPSE_THRESHOLD) {
+        setFilesOpen(false)
       }
       if (newOtherHeight < COLLAPSE_THRESHOLD) {
-        if (filesOpen) setFilesOpen(false)
+        if (tasksOpen) setTasksOpen(false)
         else if (agentsOpen) setAgentsOpen(false)
       }
     },
-    [getContentHeights, getAvailableContentHeight, filesOpen, agentsOpen, agentsHeight]
+    [getContentHeights, getAvailableContentHeight, tasksOpen, agentsOpen, agentsHeight]
   )
 
-  // Handle resize between files and agents
-  const handleFilesResize = useCallback(
+  // Handle resize between TASKS and AGENTS
+  const handleTasksAgentsResize = useCallback(
     (totalDelta: number) => {
       if (!dragStartHeights.current) {
         const heights = getContentHeights()
@@ -243,45 +266,45 @@ export function RightPanel(): React.JSX.Element {
 
       const start = dragStartHeights.current
       const available = getAvailableContentHeight()
-      const tasksH = tasksOpen ? (tasksHeight ?? available / 3) : 0
-      const maxForFilesAndAgents = available - tasksH
+      const filesH = filesOpen ? (filesHeight ?? available / 3) : 0
+      const maxForTasksAndAgents = available - filesH
 
       // Calculate new heights with proper clamping
-      let newFilesHeight = start.files + totalDelta
+      let newTasksHeight = start.tasks + totalDelta
       let newAgentsHeight = start.agents - totalDelta
 
       // Clamp both to min height
-      if (newFilesHeight < MIN_CONTENT_HEIGHT) {
-        newFilesHeight = MIN_CONTENT_HEIGHT
-        newAgentsHeight = start.agents + (start.files - MIN_CONTENT_HEIGHT)
+      if (newTasksHeight < MIN_CONTENT_HEIGHT) {
+        newTasksHeight = MIN_CONTENT_HEIGHT
+        newAgentsHeight = start.agents + (start.tasks - MIN_CONTENT_HEIGHT)
       }
       if (newAgentsHeight < MIN_CONTENT_HEIGHT) {
         newAgentsHeight = MIN_CONTENT_HEIGHT
-        newFilesHeight = start.files + (start.agents - MIN_CONTENT_HEIGHT)
+        newTasksHeight = start.tasks + (start.agents - MIN_CONTENT_HEIGHT)
       }
 
       // Ensure total doesn't exceed available
-      if (newFilesHeight + newAgentsHeight > maxForFilesAndAgents) {
-        const excess = newFilesHeight + newAgentsHeight - maxForFilesAndAgents
+      if (newTasksHeight + newAgentsHeight > maxForTasksAndAgents) {
+        const excess = newTasksHeight + newAgentsHeight - maxForTasksAndAgents
         if (totalDelta > 0) {
           newAgentsHeight = Math.max(MIN_CONTENT_HEIGHT, newAgentsHeight - excess)
         } else {
-          newFilesHeight = Math.max(MIN_CONTENT_HEIGHT, newFilesHeight - excess)
+          newTasksHeight = Math.max(MIN_CONTENT_HEIGHT, newTasksHeight - excess)
         }
       }
 
-      setFilesHeight(newFilesHeight)
+      setTasksHeight(newTasksHeight)
       setAgentsHeight(newAgentsHeight)
 
       // Auto-collapse if below threshold
-      if (newFilesHeight < COLLAPSE_THRESHOLD) {
-        setFilesOpen(false)
+      if (newTasksHeight < COLLAPSE_THRESHOLD) {
+        setTasksOpen(false)
       }
       if (newAgentsHeight < COLLAPSE_THRESHOLD) {
         setAgentsOpen(false)
       }
     },
-    [getContentHeights, getAvailableContentHeight, tasksOpen, tasksHeight]
+    [getContentHeights, getAvailableContentHeight, filesOpen, filesHeight]
   )
 
   // Reset drag start on mouse up
@@ -309,29 +332,10 @@ export function RightPanel(): React.JSX.Element {
   return (
     <aside
       ref={containerRef}
-      className="flex h-full w-full flex-col border-l border-border bg-sidebar overflow-hidden"
+      className="flex h-full w-full flex-col overflow-hidden border-l border-border/70 bg-sidebar/88 backdrop-blur-xl"
     >
-      {/* TASKS */}
-      <div className="flex flex-col shrink-0 border-b border-border">
-        <SectionHeader
-          title="TASKS"
-          icon={ListTodo}
-          badge={todos.length}
-          isOpen={tasksOpen}
-          onToggle={() => setTasksOpen((prev) => !prev)}
-        />
-        {tasksOpen && (
-          <div className="overflow-auto" style={{ height: heights.tasks }}>
-            <TasksContent />
-          </div>
-        )}
-      </div>
-
-      {/* Resize handle after TASKS */}
-      {tasksOpen && (filesOpen || agentsOpen) && <ResizeHandle onDrag={handleTasksResize} />}
-
       {/* FILES */}
-      <div className="flex flex-col shrink-0 border-b border-border">
+      <div className="flex shrink-0 flex-col border-b border-border/70">
         <SectionHeader
           title="FILES"
           icon={FolderTree}
@@ -347,10 +351,29 @@ export function RightPanel(): React.JSX.Element {
       </div>
 
       {/* Resize handle after FILES */}
-      {filesOpen && agentsOpen && <ResizeHandle onDrag={handleFilesResize} />}
+      {filesOpen && (tasksOpen || agentsOpen) && <ResizeHandle onDrag={handleFilesTopResize} />}
+
+      {/* TASKS */}
+      <div className="flex shrink-0 flex-col border-b border-border/70">
+        <SectionHeader
+          title="TASKS"
+          icon={ListTodo}
+          badge={todos.length}
+          isOpen={tasksOpen}
+          onToggle={() => setTasksOpen((prev) => !prev)}
+        />
+        {tasksOpen && (
+          <div className="overflow-auto" style={{ height: heights.tasks }}>
+            <TasksContent />
+          </div>
+        )}
+      </div>
+
+      {/* Resize handle after TASKS */}
+      {tasksOpen && agentsOpen && <ResizeHandle onDrag={handleTasksAgentsResize} />}
 
       {/* AGENTS */}
-      <div className="flex flex-col shrink-0">
+      <div className="flex shrink-0 flex-col">
         <SectionHeader
           title="AGENTS"
           icon={GitBranch}
@@ -518,6 +541,7 @@ function FilesContent(): React.JSX.Element {
   const loadedDirsRef = useRef<Set<string>>(new Set())
   const loadingDirsRef = useRef<Set<string>>(new Set())
   const isCreatingThread = threadCreation.status === "creating"
+  const displayWorkspacePath = isCreatingThread ? null : workspacePath
 
   const normalizeDirPath = useCallback((path: string) => {
     if (!path || path === "/") return "/"
@@ -619,9 +643,11 @@ function FilesContent(): React.JSX.Element {
       <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-background/30">
         <span
           className="text-[10px] text-muted-foreground truncate flex-1"
-          title={workspacePath || undefined}
+          title={displayWorkspacePath || undefined}
         >
-          {workspacePath || "No sandbox workspace"}
+          {isCreatingThread
+            ? "Preparing sandbox workspace..."
+            : displayWorkspacePath || "No sandbox workspace"}
         </span>
         <Button
           variant="ghost"

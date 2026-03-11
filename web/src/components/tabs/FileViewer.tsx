@@ -7,6 +7,7 @@ import { ImageViewer } from "./ImageViewer"
 import { MediaViewer } from "./MediaViewer"
 import { PDFViewer } from "./PDFViewer"
 import { BinaryFileViewer } from "./BinaryFileViewer"
+import { MarkdownViewer } from "./MarkdownViewer"
 
 interface FileViewerProps {
   filePath: string
@@ -24,6 +25,10 @@ export function FileViewer({ filePath, threadId }: FileViewerProps): React.JSX.E
   const fileName = filePath.split("/").pop() || filePath
   const fileTypeInfo = useMemo(() => getFileType(fileName), [fileName])
   const isBinary = useMemo(() => isBinaryFile(fileName), [fileName])
+  const isMarkdown = useMemo(() => {
+    const ext = fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() : undefined
+    return ext === "md" || ext === "mdx" || ext === "markdown"
+  }, [fileName])
 
   // Get cached content or load it
   const content = fileContents[filePath]
@@ -145,6 +150,10 @@ export function FileViewer({ filePath, threadId }: FileViewerProps): React.JSX.E
 
   if (fileTypeInfo.type === "binary") {
     return <BinaryFileViewer filePath={filePath} size={fileSize} />
+  }
+
+  if (isMarkdown && content !== undefined) {
+    return <MarkdownViewer filePath={filePath} content={content} />
   }
 
   // Default to code/text viewer

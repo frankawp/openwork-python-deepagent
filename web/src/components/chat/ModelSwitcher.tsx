@@ -129,7 +129,7 @@ export function ModelSwitcher({ threadId }: ModelSwitcherProps): React.JSX.Eleme
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+            className="h-7 gap-1.5 rounded-full border border-border/75 bg-background/55 px-2.5 text-xs text-muted-foreground hover:bg-background-interactive/65 hover:text-foreground"
           >
             {selectedModel ? (
               <>
@@ -143,13 +143,13 @@ export function ModelSwitcher({ threadId }: ModelSwitcherProps): React.JSX.Eleme
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className="w-[420px] p-0 bg-background border-border"
+          className="w-[420px] overflow-hidden rounded-2xl border-border/80 bg-popover/95 p-0 shadow-[0_12px_28px_rgba(15,23,42,0.12)] backdrop-blur-xl"
           align="start"
           sideOffset={8}
         >
           <div className="flex min-h-[240px]">
             {/* Provider column */}
-            <div className="w-[140px] border-r border-border p-2 bg-muted/30">
+            <div className="w-[140px] border-r border-border/70 bg-muted/25 p-2">
               <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-2 py-1.5">
                 Provider
               </div>
@@ -161,10 +161,10 @@ export function ModelSwitcher({ threadId }: ModelSwitcherProps): React.JSX.Eleme
                       key={provider.id}
                       onClick={() => handleProviderClick(provider)}
                       className={cn(
-                        "w-full flex items-center gap-1.5 px-2 py-1 rounded-sm text-xs transition-colors text-left",
+                        "w-full rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
                         effectiveProviderId === provider.id
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          ? "bg-background/78 text-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
                       )}
                     >
                       {Icon && <Icon className="size-3.5 shrink-0" />}
@@ -200,14 +200,14 @@ export function ModelSwitcher({ threadId }: ModelSwitcherProps): React.JSX.Eleme
                 <div className="flex flex-col h-[200px]">
                   <div className="overflow-y-auto flex-1 space-y-0.5">
                     {filteredModels.map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={() => handleModelSelect(model.id)}
-                        className={cn(
-                          "w-full flex items-center gap-1.5 px-2 py-1 rounded-sm text-xs transition-colors text-left font-mono",
+                    <button
+                      key={model.id}
+                      onClick={() => handleModelSelect(model.id)}
+                      className={cn(
+                          "w-full rounded-lg px-2 py-1.5 text-left font-mono text-xs transition-colors",
                           currentModel === model.id
-                            ? "bg-muted text-foreground"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                            ? "bg-background/78 text-foreground shadow-sm"
+                            : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
                         )}
                       >
                         <span className="flex-1 truncate">{model.id}</span>
@@ -226,7 +226,7 @@ export function ModelSwitcher({ threadId }: ModelSwitcherProps): React.JSX.Eleme
                   {selectedProvider?.hasApiKey && (
                     <button
                       onClick={() => handleConfigureApiKey(selectedProvider)}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors mt-2 border-t border-border pt-2"
+                      className="mt-2 w-full rounded-lg border-t border-border/70 px-2 py-1.5 pt-2 text-xs text-muted-foreground transition-colors hover:bg-background/45 hover:text-foreground"
                     >
                       <Key className="size-3.5" />
                       <span>Edit API Key</span>

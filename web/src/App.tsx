@@ -7,9 +7,13 @@ import { SkillsPage } from "@/components/skills/SkillsPage"
 import { ResizeHandle } from "@/components/ui/resizable"
 import { useAppStore } from "@/lib/store"
 import { ThreadProvider } from "@/lib/thread-context"
+import { Loader2 } from "lucide-react"
 
 // Badge requires ~235 screen pixels to display with comfortable margin
 const BADGE_MIN_SCREEN_WIDTH = 235
+const TITLEBAR_HEIGHT_CSS = 36
+const APP_BADGE_HEIGHT_SCREEN = 26
+const APP_BADGE_TOP_SCREEN = Math.max(0, (TITLEBAR_HEIGHT_CSS - APP_BADGE_HEIGHT_SCREEN) / 2)
 const LEFT_MAX = 350
 const LEFT_DEFAULT = 240
 
@@ -18,7 +22,8 @@ const RIGHT_MAX = 450
 const RIGHT_DEFAULT = 320
 
 function App(): React.JSX.Element {
-  const { currentThreadId, loadThreads, createThread, showKanbanView, showSkillsView } = useAppStore()
+  const { currentThreadId, loadThreads, createThread, showKanbanView, showSkillsView, threadCreation } =
+    useAppStore()
   const [isLoading, setIsLoading] = useState(true)
   const [authRequired, setAuthRequired] = useState(false)
   const [authEmail, setAuthEmail] = useState("")
@@ -28,6 +33,7 @@ function App(): React.JSX.Element {
   const [leftWidth, setLeftWidth] = useState(LEFT_DEFAULT)
   const [rightWidth, setRightWidth] = useState(RIGHT_DEFAULT)
   const [zoomLevel, setZoomLevel] = useState(1)
+  const isCreatingThread = threadCreation.status === "creating"
 
   // Track drag start widths
   const dragStartWidths = useRef<{ left: number; right: number } | null>(null)
@@ -44,7 +50,6 @@ function App(): React.JSX.Element {
         // Titlebar is 36px CSS, which becomes 36*zoom screen pixels
         // Extra padding needed when titlebar shrinks below traffic lights
         const TRAFFIC_LIGHT_BOTTOM_SCREEN = 40 // screen pixels to clear traffic lights
-        const TITLEBAR_HEIGHT_CSS = 36
         const titlebarScreenHeight = TITLEBAR_HEIGHT_CSS * detectedZoom
         const extraPaddingScreen = Math.max(0, TRAFFIC_LIGHT_BOTTOM_SCREEN - titlebarScreenHeight)
         const extraPaddingCss = Math.round(extraPaddingScreen / detectedZoom)
@@ -136,27 +141,29 @@ function App(): React.JSX.Element {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-muted-foreground">Initializing...</div>
+      <div className="app-shell flex h-screen items-center justify-center bg-background">
+        <div className="rounded-xl border border-border/80 bg-card/85 px-5 py-3 text-sm text-muted-foreground shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+          Initializing...
+        </div>
       </div>
     )
   }
 
   if (authRequired) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="w-full max-w-sm rounded-md border border-border bg-card p-6 shadow-sm">
-          <div className="text-lg font-semibold mb-4">Sign in</div>
+      <div className="app-shell flex h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-border/80 bg-card/90 p-6 shadow-[0_14px_30px_rgba(15,23,42,0.1)] backdrop-blur">
+          <div className="mb-4 text-lg font-semibold">Sign in</div>
           <div className="space-y-3">
             <input
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-border/80 bg-background/70 px-3 py-2 text-sm"
               placeholder="Email"
               type="email"
               value={authEmail}
               onChange={(e) => setAuthEmail(e.target.value)}
             />
             <input
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-border/80 bg-background/70 px-3 py-2 text-sm"
               placeholder="Password"
               type="password"
               value={authPassword}
@@ -164,7 +171,7 @@ function App(): React.JSX.Element {
             />
             {authError && <div className="text-sm text-red-500">{authError}</div>}
             <button
-              className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+              className="w-full rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:bg-primary/94"
               onClick={handleLogin}
               disabled={authLoading}
             >
@@ -178,14 +185,14 @@ function App(): React.JSX.Element {
 
   return (
     <ThreadProvider>
-      <div className="flex h-screen overflow-hidden bg-background">
+      <div className="app-shell flex h-screen overflow-hidden bg-background">
         {/* Fixed app badge - zoom independent position and size */}
         <div
           className="app-badge"
           style={{
             // Compensate both position and scale for zoom
-            // Target screen position: top 14px, left 82px (just past traffic lights)
-            top: `${14 / zoomLevel}px`,
+            // Keep badge centered in the 36px titlebar while staying past traffic lights.
+            top: `${APP_BADGE_TOP_SCREEN / zoomLevel}px`,
             left: `${82 / zoomLevel}px`,
             transform: `scale(${1 / zoomLevel})`,
             transformOrigin: "top left"
@@ -196,21 +203,26 @@ function App(): React.JSX.Element {
         </div>
 
         {/* Left + Center column */}
-        <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex min-w-0 flex-1 flex-col">
           {/* Titlebar row with tabs integrated */}
-          <div className="flex h-9 w-full shrink-0 app-drag-region">
+          <div className="app-drag-region flex h-9 w-full shrink-0 border-b border-border/70 bg-background/65 backdrop-blur-xl">
             {/* Left section - spacer for traffic lights + badge (matches left sidebar width) */}
-            <div style={{ width: leftWidth }} className="shrink-0 bg-sidebar" />
+            <div style={{ width: leftWidth }} className="shrink-0 bg-sidebar/85" />
 
             {/* Resize handle spacer */}
             <div className="w-[1px] shrink-0" />
 
             {/* Center section - Tab bar or Kanban header */}
-            <div className="flex-1 min-w-0 bg-background border-b border-border">
+            <div className="min-w-0 flex-1 bg-background/60">
               {showKanbanView ? (
                 <KanbanHeader className="h-full" />
               ) : showSkillsView ? (
-                <div className="h-full flex items-center px-4 text-sm font-medium">Skills</div>
+                <div className="flex h-full items-center px-4 text-sm font-medium">Skills</div>
+              ) : isCreatingThread ? (
+                <div className="flex h-full items-center gap-2 px-4 text-xs uppercase tracking-[0.08em] text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin text-status-info" />
+                  <span>Preparing thread...</span>
+                </div>
               ) : (
                 currentThreadId && <TabBar className="h-full border-b-0" />
               )}
@@ -239,7 +251,13 @@ function App(): React.JSX.Element {
               <>
                 {/* Center - Content Panel (Agent Chat + File Viewer) */}
                 <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
-                  {currentThreadId ? (
+                  {isCreatingThread ? (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 className="size-8 animate-spin text-status-info" />
+                      <div className="text-sm">Preparing thread workspace...</div>
+                      <div className="text-xs">The new session will load automatically when ready.</div>
+                    </div>
+                  ) : currentThreadId ? (
                     <TabbedPanel threadId={currentThreadId} showTabBar={false} />
                   ) : (
                     <div className="flex flex-1 items-center justify-center text-muted-foreground">

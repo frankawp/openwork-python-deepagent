@@ -129,7 +129,7 @@ export function ThreadSkillsPicker({
           variant="ghost"
           size="sm"
           className={cn(
-            "h-7 gap-1.5 px-2 text-xs",
+            "h-7 gap-1.5 rounded-full border border-border/75 bg-background/55 px-2.5 text-xs",
             selectedCount > 0
               ? "text-status-nominal hover:text-status-nominal"
               : "text-muted-foreground hover:text-foreground"
@@ -140,8 +140,11 @@ export function ThreadSkillsPicker({
           <span>{displayLabel}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[380px] p-0 bg-background border-border">
-        <div className="p-3 border-b border-border space-y-2">
+      <PopoverContent
+        align="start"
+        className="w-[380px] overflow-hidden rounded-2xl border-border/80 bg-popover/95 p-0 shadow-[0_12px_28px_rgba(15,23,42,0.12)] backdrop-blur-xl"
+      >
+        <div className="space-y-2 border-b border-border/70 p-3">
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium">Thread Skills</div>
             <Button
@@ -156,8 +159,8 @@ export function ThreadSkillsPicker({
           </div>
           <div className="text-xs text-muted-foreground">Materialization: {statusLabel(materialization)}</div>
         </div>
-        <div className="grid grid-cols-2 min-h-[280px]">
-          <div className="border-r border-border">
+        <div className="grid min-h-[280px] grid-cols-2">
+          <div className="border-r border-border/70">
             <div className="px-3 py-2 text-xs text-muted-foreground">Available</div>
             <div className="max-h-[240px] overflow-auto px-2 pb-2 space-y-1">
               {loading ? (
@@ -172,10 +175,10 @@ export function ThreadSkillsPicker({
                     <button
                       key={skill.id}
                       className={cn(
-                        "w-full rounded-sm border px-2 py-1.5 text-left text-xs",
+                        "w-full rounded-lg border px-2 py-1.5 text-left text-xs",
                         checked
                           ? "border-status-nominal/50 bg-status-nominal/10"
-                          : "border-border hover:bg-muted/50"
+                          : "border-border/80 hover:bg-muted/50"
                       )}
                       onClick={() => toggleSkill(skill.id)}
                     >
@@ -199,7 +202,7 @@ export function ThreadSkillsPicker({
                 selectedSkills.map((skill, idx) => (
                   <div
                     key={skill.id}
-                    className="flex items-center gap-1 rounded-sm border border-border px-2 py-1 text-xs"
+                    className="flex items-center gap-1 rounded-lg border border-border/80 px-2 py-1 text-xs"
                   >
                     <div className="flex-1 truncate">{skill.name}</div>
                     <button
@@ -220,7 +223,7 @@ export function ThreadSkillsPicker({
             </div>
           </div>
         </div>
-        <div className="border-t border-border p-3 flex items-center justify-between">
+        <div className="flex items-center justify-between border-t border-border/70 p-3">
           <div className="text-xs text-status-critical min-h-4">{error || ""}</div>
           <Button
             size="sm"
