@@ -409,6 +409,18 @@ export class ElectronIPCTransport implements UseStreamTransport {
         })
         break
 
+      case "warning":
+        events.push({
+          event: "custom",
+          data: {
+            type: "warning",
+            warningType: event.warning_type || "warning",
+            message: event.message,
+            reason: event.reason
+          }
+        })
+        break
+
       case "done":
         events.push({
           event: "done",

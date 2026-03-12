@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
+from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
@@ -18,7 +20,7 @@ from .daytona_backend import (
     get_or_create_daytona_backend,
 )
 from .model_catalog import DEFAULT_MODEL_ID, MODELS
-from .models import AppSetting, GlobalApiKey
+from .models import AppSetting, GlobalApiKey, ThreadMCPRuntimeState
 from .mcp_service import (
     STATUS_CONNECTING,
     STATUS_FAILED,
@@ -33,6 +35,21 @@ from .system_prompt import build_system_prompt
 DEEPSEEK_CHAT_MODEL_ID = "deepseek-chat"
 DEEPSEEK_REASONER_MODEL_ID = "deepseek-reasoner"
 MCP_TOOL_LOAD_TIMEOUT_SECONDS = 20
+MCP_FAILURE_COOLDOWN_SECONDS = 120
+
+
+@dataclass(frozen=True)
+class MCPToolsLoadResult:
+    tools: list[Any]
+    degraded: bool
+    degraded_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class RuntimeCreationResult:
+    agent: Any
+    mcp_degraded: bool
+    mcp_degraded_reason: str | None = None
 
 
 def _get_api_key(provider: str) -> str | None:
@@ -152,7 +169,57 @@ def _configure_mcp_tools_for_runtime(tools: list[Any]) -> list[Any]:
     return tools
 
 
-async def _load_thread_mcp_tools(thread_id: str, *, daytona_sandbox: Any) -> list[Any]:
+def _collect_exception_messages(exc: BaseException) -> list[str]:
+    if isinstance(exc, BaseExceptionGroup):
+        messages: list[str] = []
+        for sub_exc in exc.exceptions:
+            messages.extend(_collect_exception_messages(sub_exc))
+        return messages
+
+    message = str(exc).strip()
+    if not message:
+        return [exc.__class__.__name__]
+    if message.startswith(exc.__class__.__name__):
+        return [message]
+    return [f"{exc.__class__.__name__}: {message}"]
+
+
+def _summarize_exception(exc: BaseException, *, max_items: int = 3) -> str:
+    unique: list[str] = []
+    for message in _collect_exception_messages(exc):
+        if message not in unique:
+            unique.append(message)
+    summary = " | ".join(unique[:max_items]).strip()
+    return summary or exc.__class__.__name__
+
+
+def _format_mcp_error(server_key: str, exc: BaseException) -> str:
+    return f"{server_key}: {_summarize_exception(exc)}"
+
+
+def _get_mcp_cooldown_reason(thread_id: str) -> str | None:
+    db = SessionLocal()
+    try:
+        state = db.get(ThreadMCPRuntimeState, thread_id)
+    finally:
+        db.close()
+
+    if not state or state.status != STATUS_FAILED or not state.updated_at:
+        return None
+
+    elapsed = (dt.datetime.utcnow() - state.updated_at).total_seconds()
+    remaining = int(MCP_FAILURE_COOLDOWN_SECONDS - elapsed)
+    if remaining <= 0:
+        return None
+
+    last_error = (state.last_error or "MCP initialization failed previously").strip()
+    return (
+        f"MCP reconnect cooldown active ({remaining}s remaining). "
+        f"Continuing without MCP tools. Last error: {last_error}"
+    )[:4000]
+
+
+async def _load_thread_mcp_tools(thread_id: str, *, daytona_sandbox: Any) -> MCPToolsLoadResult:
     db = SessionLocal()
     try:
         servers = get_runtime_thread_mcp_servers(db, thread_id=thread_id)
@@ -161,7 +228,11 @@ async def _load_thread_mcp_tools(thread_id: str, *, daytona_sandbox: Any) -> lis
 
     if not servers:
         _update_thread_mcp_state(thread_id, status=STATUS_READY, last_error=None)
-        return []
+        return MCPToolsLoadResult(tools=[], degraded=False, degraded_reason=None)
+
+    cooldown_reason = _get_mcp_cooldown_reason(thread_id)
+    if cooldown_reason:
+        return MCPToolsLoadResult(tools=[], degraded=True, degraded_reason=cooldown_reason)
 
     mcp_configs: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
@@ -173,12 +244,12 @@ async def _load_thread_mcp_tools(thread_id: str, *, daytona_sandbox: Any) -> lis
                 daytona_sandbox=daytona_sandbox,
             )
         except Exception as e:
-            errors.append(f"{server.key}: {e}")
+            errors.append(_format_mcp_error(server.key, e))
 
     if not mcp_configs:
         detail = "; ".join(errors)[:4000] if errors else None
         _update_thread_mcp_state(thread_id, status=STATUS_FAILED, last_error=detail)
-        raise RuntimeError(f"Failed to configure MCP servers: {detail}")
+        return MCPToolsLoadResult(tools=[], degraded=True, degraded_reason=detail)
 
     _update_thread_mcp_state(thread_id, status=STATUS_CONNECTING, last_error=None)
     all_tools: list[Any] = []
@@ -191,23 +262,23 @@ async def _load_thread_mcp_tools(thread_id: str, *, daytona_sandbox: Any) -> lis
             )
             all_tools.extend(_configure_mcp_tools_for_runtime(tools))
         except Exception as e:
-            errors.append(f"{server_key}: {e}")
+            errors.append(_format_mcp_error(server_key, e))
 
     if not all_tools and errors:
         detail = "; ".join(errors)[:4000]
         _update_thread_mcp_state(thread_id, status=STATUS_FAILED, last_error=detail)
-        raise RuntimeError(f"Failed to connect MCP tools: {detail}")
+        return MCPToolsLoadResult(tools=[], degraded=True, degraded_reason=detail)
 
     detail = "; ".join(errors)[:4000] if errors else None
     _update_thread_mcp_state(thread_id, status=STATUS_READY, last_error=detail)
-    return all_tools
+    return MCPToolsLoadResult(tools=all_tools, degraded=False, degraded_reason=None)
 
 
 async def create_runtime(
     thread_id: str,
     model_id: str | None = None,
     skills_enabled: bool = True,
-) -> Any:
+) -> RuntimeCreationResult:
     model = _get_model_instance(model_id)
     checkpointer = MySQLSaver()
     cfg = load_config()
@@ -229,7 +300,7 @@ async def create_runtime(
         )
     finally:
         db.close()
-    mcp_tools = await _load_thread_mcp_tools(
+    mcp_result = await _load_thread_mcp_tools(
         thread_id,
         daytona_sandbox=daytona_context.sandbox,
     )
@@ -238,11 +309,15 @@ async def create_runtime(
 
     agent = create_deep_agent(
         model=model,
-        tools=mcp_tools,
+        tools=mcp_result.tools,
         skills=skills_paths,
         system_prompt=SystemMessage(content=system_prompt),
         backend=backend,
         checkpointer=checkpointer,
         interrupt_on={"execute": True},
     )
-    return agent
+    return RuntimeCreationResult(
+        agent=agent,
+        mcp_degraded=mcp_result.degraded,
+        mcp_degraded_reason=mcp_result.degraded_reason,
+    )

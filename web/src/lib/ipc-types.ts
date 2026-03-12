@@ -63,6 +63,13 @@ export interface IPCErrorEvent {
   error: string
 }
 
+export interface IPCWarningEvent {
+  type: "warning"
+  warning_type?: string
+  message: string
+  reason?: string
+}
+
 export type IPCEvent =
   | IPCValuesEvent
   | IPCTokenEvent
@@ -70,3 +77,4 @@ export type IPCEvent =
   | IPCStreamEvent
   | IPCDoneEvent
   | IPCErrorEvent
+  | IPCWarningEvent

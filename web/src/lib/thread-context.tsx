@@ -32,6 +32,11 @@ export interface TokenUsage {
   lastUpdated: Date
 }
 
+export interface ThreadNotice {
+  key: string
+  message: string
+}
+
 // Per-thread state (persisted/restored from checkpoints)
 export interface ThreadState {
   messages: Message[]
@@ -48,6 +53,8 @@ export interface ThreadState {
   fileContents: Record<string, string>
   tokenUsage: TokenUsage | null
   draftInput: string
+  notice: ThreadNotice | null
+  seenWarningKeys: string[]
 }
 
 // Stream instance type
@@ -78,6 +85,8 @@ export interface ThreadActions {
   setActiveTab: (tab: "agent" | string) => void
   setFileContents: (path: string, content: string) => void
   setDraftInput: (input: string) => void
+  setNotice: (notice: ThreadNotice | null) => void
+  dismissNotice: () => void
 }
 
 // Context value
@@ -113,7 +122,9 @@ const createDefaultThreadState = (): ThreadState => ({
   activeTab: "agent",
   fileContents: {},
   tokenUsage: null,
-  draftInput: ""
+  draftInput: "",
+  notice: null,
+  seenWarningKeys: []
 })
 
 const defaultStreamData: StreamData = {
@@ -145,6 +156,9 @@ interface CustomEventData {
     cacheReadTokens?: number
     cacheCreationTokens?: number
   }
+  warningType?: string
+  message?: string
+  reason?: string
 }
 
 // Component that holds a stream and notifies subscribers
@@ -435,6 +449,22 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
             })
           }
           break
+        case "warning": {
+          const warningType = data.warningType || "warning"
+          const warningMessage = data.reason
+            ? `${data.message || "Warning"} ${data.reason}`
+            : data.message || "Warning"
+          updateThreadState(threadId, (state) => {
+            if (state.seenWarningKeys.includes(warningType)) {
+              return {}
+            }
+            return {
+              seenWarningKeys: [...state.seenWarningKeys, warningType],
+              notice: { key: warningType, message: warningMessage }
+            }
+          })
+          break
+        }
       }
     },
     [updateThreadState]
@@ -534,6 +564,12 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
         },
         setDraftInput: (input: string) => {
           updateThreadState(threadId, () => ({ draftInput: input }))
+        },
+        setNotice: (notice: ThreadNotice | null) => {
+          updateThreadState(threadId, () => ({ notice }))
+        },
+        dismissNotice: () => {
+          updateThreadState(threadId, () => ({ notice: null }))
         }
       }
 

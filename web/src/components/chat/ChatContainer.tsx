@@ -43,6 +43,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     pendingApproval,
     todos,
     error: threadError,
+    notice: threadNotice,
     tokenUsage,
     currentModel,
     draftInput: input,
@@ -50,6 +51,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     setPendingApproval,
     appendMessage,
     clearError,
+    dismissNotice,
     setDraftInput: setInput
   } = useCurrentThread(threadId)
 
@@ -346,6 +348,23 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
             )}
 
             {/* Error state */}
+            {threadNotice && !isLoading && (
+              <div className="flex items-start gap-3 rounded-xl border border-status-warning/45 bg-status-warning/10 p-4 shadow-[0_8px_18px_rgba(146,64,14,0.08)]">
+                <AlertCircle className="mt-0.5 size-5 shrink-0 text-status-warning" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-status-warning">Capability Notice</div>
+                  <div className="mt-1 break-words text-sm text-muted-foreground">{threadNotice.message}</div>
+                </div>
+                <button
+                  onClick={dismissNotice}
+                  className="shrink-0 rounded-md p-1 transition-colors hover:bg-status-warning/20"
+                  aria-label="Dismiss notice"
+                >
+                  <X className="size-4 text-muted-foreground" />
+                </button>
+              </div>
+            )}
+
             {threadError && !isLoading && (
               <div className="flex items-start gap-3 rounded-xl border border-destructive/45 bg-destructive/10 p-4 shadow-[0_8px_18px_rgba(127,29,29,0.12)]">
                 <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive" />

@@ -25,6 +25,22 @@ def _serialize_sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
+def _serialize_warning(
+    *,
+    warning_type: str,
+    message: str,
+    reason: str | None = None,
+) -> str:
+    payload = {
+        "type": "warning",
+        "warning_type": warning_type,
+        "message": message,
+    }
+    if reason:
+        payload["reason"] = reason
+    return _serialize_sse(payload)
+
+
 def _normalize_interrupts(data: object) -> object:
     if not isinstance(data, dict):
         return data
@@ -101,11 +117,18 @@ async def _agent_stream(payload: AgentStreamRequest) -> AsyncGenerator[str, None
     for index, model_id in enumerate(model_candidates):
         emitted_any = False
         try:
-            agent = await create_runtime(
+            runtime = await create_runtime(
                 thread_id=payload.thread_id,
                 model_id=model_id,
                 skills_enabled=payload.skills_enabled,
             )
+            agent = runtime.agent
+            if runtime.mcp_degraded:
+                yield _serialize_warning(
+                    warning_type="mcp_degraded",
+                    message="MCP services are unavailable. Continuing without MCP tools.",
+                    reason=runtime.mcp_degraded_reason,
+                )
 
             config = {"configurable": {"thread_id": payload.thread_id}}
 
@@ -150,11 +173,18 @@ async def _agent_interrupt(payload: AgentInterruptRequest) -> AsyncGenerator[str
     for index, model_id in enumerate(model_candidates):
         emitted_any = False
         try:
-            agent = await create_runtime(
+            runtime = await create_runtime(
                 thread_id=payload.thread_id,
                 model_id=model_id,
                 skills_enabled=payload.skills_enabled,
             )
+            agent = runtime.agent
+            if runtime.mcp_degraded:
+                yield _serialize_warning(
+                    warning_type="mcp_degraded",
+                    message="MCP services are unavailable. Continuing without MCP tools.",
+                    reason=runtime.mcp_degraded_reason,
+                )
             config = {"configurable": {"thread_id": payload.thread_id}}
             resume = _normalize_resume(payload.decision)
             command = Command(resume=resume)
