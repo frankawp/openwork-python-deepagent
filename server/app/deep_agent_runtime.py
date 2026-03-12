@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from deepagents import create_deep_agent
 
@@ -17,11 +19,20 @@ from .daytona_backend import (
 )
 from .model_catalog import DEFAULT_MODEL_ID, MODELS
 from .models import AppSetting, GlobalApiKey
+from .mcp_service import (
+    STATUS_CONNECTING,
+    STATUS_FAILED,
+    STATUS_READY,
+    build_mcp_client_entry,
+    get_runtime_thread_mcp_servers,
+    update_thread_mcp_runtime_state,
+)
 from .skills_service import get_runtime_skill_paths
 from .system_prompt import build_system_prompt
 
 DEEPSEEK_CHAT_MODEL_ID = "deepseek-chat"
 DEEPSEEK_REASONER_MODEL_ID = "deepseek-reasoner"
+MCP_TOOL_LOAD_TIMEOUT_SECONDS = 20
 
 
 def _get_api_key(provider: str) -> str | None:
@@ -112,7 +123,87 @@ def _get_model_instance(model_id: str | None) -> BaseChatModel:
     raise RuntimeError(f"Unsupported provider: {provider}")
 
 
-def create_runtime(
+def _update_thread_mcp_state(
+    thread_id: str,
+    *,
+    status: str,
+    last_error: str | None = None,
+) -> None:
+    db = SessionLocal()
+    try:
+        update_thread_mcp_runtime_state(
+            db,
+            thread_id=thread_id,
+            status=status,
+            last_error=last_error,
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+def _configure_mcp_tools_for_runtime(tools: list[Any]) -> list[Any]:
+    for tool in tools:
+        if hasattr(tool, "handle_tool_error"):
+            try:
+                setattr(tool, "handle_tool_error", True)
+            except Exception:
+                pass
+    return tools
+
+
+async def _load_thread_mcp_tools(thread_id: str, *, daytona_sandbox: Any) -> list[Any]:
+    db = SessionLocal()
+    try:
+        servers = get_runtime_thread_mcp_servers(db, thread_id=thread_id)
+    finally:
+        db.close()
+
+    if not servers:
+        _update_thread_mcp_state(thread_id, status=STATUS_READY, last_error=None)
+        return []
+
+    mcp_configs: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    for server in servers:
+        try:
+            mcp_configs[server.key] = build_mcp_client_entry(
+                server,
+                thread_id=thread_id,
+                daytona_sandbox=daytona_sandbox,
+            )
+        except Exception as e:
+            errors.append(f"{server.key}: {e}")
+
+    if not mcp_configs:
+        detail = "; ".join(errors)[:4000] if errors else None
+        _update_thread_mcp_state(thread_id, status=STATUS_FAILED, last_error=detail)
+        raise RuntimeError(f"Failed to configure MCP servers: {detail}")
+
+    _update_thread_mcp_state(thread_id, status=STATUS_CONNECTING, last_error=None)
+    all_tools: list[Any] = []
+    for server_key, connection in mcp_configs.items():
+        client = MultiServerMCPClient({server_key: connection}, tool_name_prefix=True)
+        try:
+            tools = await asyncio.wait_for(
+                client.get_tools(server_name=server_key),
+                timeout=MCP_TOOL_LOAD_TIMEOUT_SECONDS,
+            )
+            all_tools.extend(_configure_mcp_tools_for_runtime(tools))
+        except Exception as e:
+            errors.append(f"{server_key}: {e}")
+
+    if not all_tools and errors:
+        detail = "; ".join(errors)[:4000]
+        _update_thread_mcp_state(thread_id, status=STATUS_FAILED, last_error=detail)
+        raise RuntimeError(f"Failed to connect MCP tools: {detail}")
+
+    detail = "; ".join(errors)[:4000] if errors else None
+    _update_thread_mcp_state(thread_id, status=STATUS_READY, last_error=detail)
+    return all_tools
+
+
+async def create_runtime(
     thread_id: str,
     model_id: str | None = None,
     skills_enabled: bool = True,
@@ -138,12 +229,16 @@ def create_runtime(
         )
     finally:
         db.close()
+    mcp_tools = await _load_thread_mcp_tools(
+        thread_id,
+        daytona_sandbox=daytona_context.sandbox,
+    )
 
     system_prompt = build_system_prompt(daytona_context.workspace_root)
 
     agent = create_deep_agent(
         model=model,
-        tools=[],
+        tools=mcp_tools,
         skills=skills_paths,
         system_prompt=SystemMessage(content=system_prompt),
         backend=backend,
