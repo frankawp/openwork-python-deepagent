@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, EmailStr
 
@@ -94,29 +94,50 @@ class SkillFileDetailOut(SkillFileOut):
     content: str
 
 
-class ThreadSkillBindingOut(BaseModel):
+MCPTransport = Literal["streamable_http", "sse", "stdio"]
+
+
+class MCPServerCreate(BaseModel):
+    key: str
+    name: str
+    description: str
+    transport: MCPTransport
+    config: dict[str, Any]
+    secret: Optional[dict[str, Any]] = None
+    enabled: bool = True
+
+
+class MCPServerUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    transport: Optional[MCPTransport] = None
+    config: Optional[dict[str, Any]] = None
+    secret: Optional[dict[str, Any]] = None
+    enabled: Optional[bool] = None
+
+
+class MCPServerOut(BaseModel):
     id: str
-    thread_id: str
-    skill_id: str
-    position: int
+    user_id: str
+    key: str
+    name: str
+    description: str
+    transport: MCPTransport
+    config: dict[str, Any]
     enabled: bool
     created_at: dt.datetime
     updated_at: dt.datetime
-    skill: SkillOut
 
 
-class ThreadSkillBindingSet(BaseModel):
-    skill_ids: list[str]
+class MCPServerTestOut(BaseModel):
+    success: bool
+    message: str
+    tool_count: int = 0
+    tools: list[str] = []
 
 
-class ThreadSkillMaterializationStateOut(BaseModel):
-    thread_id: str
-    desired_hash: Optional[str] = None
-    materialized_hash: Optional[str] = None
-    status: str
-    materialized_root: Optional[str] = None
-    last_error: Optional[str] = None
-    updated_at: dt.datetime
+class MCPServerTestIn(BaseModel):
+    thread_id: Optional[str] = None
 
 
 class ProviderOut(BaseModel):

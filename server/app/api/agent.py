@@ -101,7 +101,7 @@ async def _agent_stream(payload: AgentStreamRequest) -> AsyncGenerator[str, None
     for index, model_id in enumerate(model_candidates):
         emitted_any = False
         try:
-            agent = create_runtime(
+            agent = await create_runtime(
                 thread_id=payload.thread_id,
                 model_id=model_id,
                 skills_enabled=payload.skills_enabled,
@@ -150,7 +150,7 @@ async def _agent_interrupt(payload: AgentInterruptRequest) -> AsyncGenerator[str
     for index, model_id in enumerate(model_candidates):
         emitted_any = False
         try:
-            agent = create_runtime(
+            agent = await create_runtime(
                 thread_id=payload.thread_id,
                 model_id=model_id,
                 skills_enabled=payload.skills_enabled,

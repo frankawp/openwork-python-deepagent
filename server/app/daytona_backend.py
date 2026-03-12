@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class DaytonaBackendContext:
     backend: Any
     workspace_root: str
+    sandbox: Any
 
 
 def ensure_daytona_configured() -> None:
@@ -81,7 +82,11 @@ def get_or_create_daytona_backend(
         sandbox_id=getattr(sandbox, "id", None),
     )
 
-    return DaytonaBackendContext(backend=backend, workspace_root=workspace_root)
+    return DaytonaBackendContext(
+        backend=backend,
+        workspace_root=workspace_root,
+        sandbox=sandbox,
+    )
 
 
 def ensure_daytona_thread_environment(

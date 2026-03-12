@@ -14,6 +14,7 @@ export interface IPCMessage {
   type: "human" | "ai" | "tool" | "system"
   content: string
   tool_calls?: { id: string; name: string; args: Record<string, unknown> }[]
+  status?: "success" | "error"
 }
 
 export interface IPCValuesEvent {

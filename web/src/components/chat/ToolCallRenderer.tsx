@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   CheckCircle2,
+  AlertTriangle,
   Circle,
   Clock,
   XCircle,
@@ -67,6 +68,11 @@ function isRejectedToolOutput(output: string): boolean {
     normalized.includes("tool call was rejected") ||
     normalized.includes("user rejected")
   )
+}
+
+function isOutsideAllowedDirectoriesError(output: string): boolean {
+  const normalized = output.toLowerCase()
+  return normalized.includes("access denied") && normalized.includes("outside allowed directories")
 }
 
 // Render todos nicely
@@ -318,6 +324,14 @@ export function ToolCallRenderer({
   const Icon = TOOL_ICONS[toolCall.name] || Terminal
   const label = TOOL_LABELS[toolCall.name] || toolCall.name
   const isPanelSynced = PANEL_SYNCED_TOOLS.has(toolCall.name)
+  const resultText =
+    result === undefined ? "" : typeof result === "string" ? result : JSON.stringify(result)
+  const isWarning = Boolean(isError && resultText && isOutsideAllowedDirectoriesError(resultText))
+  const resultSeverity: "success" | "warning" | "error" = isError
+    ? isWarning
+      ? "warning"
+      : "error"
+    : "success"
 
   const handleApprove = (e: React.MouseEvent): void => {
     e.stopPropagation()
@@ -382,9 +396,11 @@ export function ToolCallRenderer({
 
     // Handle errors
     if (isError) {
+      const ErrorIcon = isWarning ? AlertTriangle : XCircle
+      const errorClass = isWarning ? "text-status-warning" : "text-status-critical"
       return (
-        <div className="text-xs text-status-critical flex items-start gap-1.5">
-          <XCircle className="size-3 mt-0.5 shrink-0" />
+        <div className={cn("text-xs flex items-start gap-1.5", errorClass)}>
+          <ErrorIcon className="size-3 mt-0.5 shrink-0" />
           <span className="break-words">
             {typeof result === "string" ? result : JSON.stringify(result)}
           </span>
@@ -623,8 +639,17 @@ export function ToolCallRenderer({
         )}
 
         {result !== undefined && !needsApproval && (
-          <Badge variant={isError ? "critical" : "nominal"} className="ml-auto shrink-0">
-            {isError ? "ERROR" : "OK"}
+          <Badge
+            variant={
+              resultSeverity === "warning"
+                ? "warning"
+                : resultSeverity === "error"
+                  ? "critical"
+                  : "nominal"
+            }
+            className="ml-auto shrink-0"
+          >
+            {resultSeverity === "warning" ? "WARN" : resultSeverity === "error" ? "ERROR" : "OK"}
           </Badge>
         )}
 
@@ -697,7 +722,11 @@ export function ToolCallRenderer({
               <pre
                 className={cn(
                   "text-xs font-mono p-2 rounded-sm overflow-auto max-h-48 w-full whitespace-pre-wrap break-all",
-                  isError ? "bg-status-critical/10 text-status-critical" : "bg-background"
+                  resultSeverity === "warning"
+                    ? "bg-status-warning/10 text-status-warning"
+                    : resultSeverity === "error"
+                      ? "bg-status-critical/10 text-status-critical"
+                      : "bg-background"
                 )}
               >
                 {typeof result === "string" ? result : JSON.stringify(result, null, 2)}

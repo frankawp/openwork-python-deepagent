@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 import yaml
 
+from ..checkpointer_mysql import MySQLSaver
 from ..deps import get_current_user, get_db
 from ..models import Skill, SkillFile, User
 from ..schemas import (
@@ -21,12 +22,19 @@ from ..skills_service import (
     content_checksum,
     normalize_skill_file_path,
     normalize_skill_key,
-    update_thread_materialization_state,
-    update_materialization_state_for_skill,
+    sync_user_skill_bindings,
     validate_skill_markdown,
 )
 
 router = APIRouter(prefix="/skills", tags=["skills"])
+
+
+def _clear_skills_metadata_cache(thread_ids: list[str]) -> None:
+    if not thread_ids:
+        return
+    checkpointer = MySQLSaver()
+    for thread_id in sorted(set(thread_ids)):
+        checkpointer.clear_channel_value(thread_id, "skills_metadata")
 
 
 def _to_skill_out(skill: Skill) -> SkillOut:
@@ -108,12 +116,16 @@ def create_skill(
     )
     db.add(skill)
     db.add(skill_file)
+    affected_thread_ids: list[str] = []
     try:
+        db.flush()
+        affected_thread_ids = sync_user_skill_bindings(db, user_id=user.id)
         db.commit()
     except IntegrityError as e:
         db.rollback()
         raise HTTPException(status_code=409, detail="Skill key already exists") from e
     db.refresh(skill)
+    _clear_skills_metadata_cache(affected_thread_ids)
     return _to_skill_out(skill)
 
 
@@ -141,24 +153,24 @@ def update_skill(
     if payload.enabled is not None:
         skill.enabled = payload.enabled
         changed = True
-        update_materialization_state_for_skill(db, skill.id)
 
     if changed:
         skill.updated_at = dt.datetime.utcnow()
+        affected_thread_ids = sync_user_skill_bindings(db, user_id=user.id)
         db.commit()
         db.refresh(skill)
+        _clear_skills_metadata_cache(affected_thread_ids)
     return _to_skill_out(skill)
 
 
 @router.delete("/{skill_id}")
 def delete_skill(skill_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     skill = _must_get_user_skill(db, skill_id, user.id)
-    affected_thread_ids = [binding.thread_id for binding in skill.thread_bindings]
     db.delete(skill)
+    db.flush()
+    affected_thread_ids = sync_user_skill_bindings(db, user_id=user.id)
     db.commit()
-    for thread_id in sorted(set(affected_thread_ids)):
-        update_thread_materialization_state(db, thread_id)
-    db.commit()
+    _clear_skills_metadata_cache(affected_thread_ids)
     return {"success": True}
 
 
@@ -213,9 +225,10 @@ def upsert_skill_file(
         db.add(file)
 
     skill.updated_at = now
-    update_materialization_state_for_skill(db, skill.id)
+    affected_thread_ids = sync_user_skill_bindings(db, user_id=user.id)
     db.commit()
     db.refresh(file)
+    _clear_skills_metadata_cache(affected_thread_ids)
     return _to_file_detail_out(file)
 
 
@@ -241,6 +254,7 @@ def delete_skill_file(
 
     db.delete(file)
     skill.updated_at = dt.datetime.utcnow()
-    update_materialization_state_for_skill(db, skill.id)
+    affected_thread_ids = sync_user_skill_bindings(db, user_id=user.id)
     db.commit()
+    _clear_skills_metadata_cache(affected_thread_ids)
     return {"success": True}

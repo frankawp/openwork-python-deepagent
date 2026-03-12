@@ -41,6 +41,7 @@ interface SerializedMessageChunk {
     tool_call_chunks?: ToolCallChunk[]
     tool_call_id?: string
     name?: string
+    status?: "success" | "error"
     usage_metadata?: UsageMetadata
     response_metadata?: {
       usage?: UsageMetadata
@@ -542,7 +543,8 @@ export class ElectronIPCTransport implements UseStreamTransport {
               type: "tool",
               content,
               tool_call_id: kwargs.tool_call_id,
-              name: kwargs.name
+              name: kwargs.name,
+              status: kwargs.status
             },
             { langgraph_node: metadata?.langgraph_node || "tools" }
           ]
@@ -636,7 +638,8 @@ export class ElectronIPCTransport implements UseStreamTransport {
             ...(type === "ai" && kwargs.tool_calls && { tool_calls: kwargs.tool_calls }),
             // Include tool_call_id and name for tool messages
             ...(type === "tool" && kwargs.tool_call_id && { tool_call_id: kwargs.tool_call_id }),
-            ...(type === "tool" && kwargs.name && { name: kwargs.name })
+            ...(type === "tool" && kwargs.name && { name: kwargs.name }),
+            ...(type === "tool" && kwargs.status && { status: kwargs.status })
           }
         })
 

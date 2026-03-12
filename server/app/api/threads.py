@@ -19,8 +19,10 @@ from ..deps import get_db, get_current_user
 from langchain_core.messages.base import BaseMessage
 
 from ..checkpointer_mysql import MySQLSaver
+from ..mcp_service import sync_user_mcp_bindings
 from ..models import Thread, User
 from ..schemas import ThreadCreate, ThreadOut, ThreadUpdate
+from ..skills_service import sync_user_skill_bindings
 
 router = APIRouter(prefix="/threads", tags=["threads"])
 
@@ -166,6 +168,32 @@ def create_thread(
             detail=f"Failed to initialize Daytona environment: {e}",
         ) from e
 
+    try:
+        synced_skill_threads = sync_user_skill_bindings(
+            db,
+            user_id=user.id,
+            thread_ids=[thread.id],
+        )
+        synced_mcp_threads = sync_user_mcp_bindings(
+            db,
+            user_id=user.id,
+            thread_ids=[thread.id],
+        )
+        db.commit()
+        checkpointer = MySQLSaver()
+        for synced_thread_id in sorted(set(synced_skill_threads + synced_mcp_threads)):
+            checkpointer.clear_channel_value(synced_thread_id, "skills_metadata")
+            checkpointer.clear_channel_value(synced_thread_id, "mcp_tools_metadata")
+    except Exception as e:
+        db.rollback()
+        delete_daytona_sandbox_for_thread(thread.id)
+        db.delete(thread)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initialize thread capabilities: {e}",
+        ) from e
+
     return _to_out(thread)
 
 
@@ -243,6 +271,7 @@ def thread_history(
                             "tool_calls": getattr(msg, "tool_calls", None),
                             "tool_call_id": getattr(msg, "tool_call_id", None),
                             "name": getattr(msg, "name", None),
+                            "status": getattr(msg, "status", None),
                         }
                     )
                 elif isinstance(msg, dict) and "type" in msg and "data" in msg:
@@ -255,6 +284,7 @@ def thread_history(
                             "tool_calls": data.get("tool_calls"),
                             "tool_call_id": data.get("tool_call_id"),
                             "name": data.get("name"),
+                            "status": data.get("status"),
                         }
                     )
                 elif isinstance(msg, dict):

@@ -325,7 +325,7 @@ export function ThreadSidebar(): React.JSX.Element {
           onClick={() => setShowSkillsView(true)}
         >
           <Wrench className="size-4" />
-          Skills
+          Skills & MCP
         </Button>
         <Button
           variant="ghost"

@@ -9,7 +9,6 @@ import { ModelSwitcher } from "./ModelSwitcher"
 import { WorkspacePicker } from "./WorkspacePicker"
 import { ChatTodos } from "./ChatTodos"
 import { ContextUsageIndicator } from "./ContextUsageIndicator"
-import { ThreadSkillsPicker } from "./ThreadSkillsPicker"
 import type { Message } from "@/types"
 
 interface AgentStreamValues {
@@ -23,6 +22,7 @@ interface StreamMessage {
   tool_calls?: Message["tool_calls"]
   tool_call_id?: string
   name?: string
+  status?: "success" | "error"
 }
 
 interface ChatContainerProps {
@@ -45,14 +45,12 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     error: threadError,
     tokenUsage,
     currentModel,
-    skillsEnabled,
     draftInput: input,
     setTodos,
     setPendingApproval,
     appendMessage,
     clearError,
-    setDraftInput: setInput,
-    setSkillsEnabled
+    setDraftInput: setInput
   } = useCurrentThread(threadId)
 
   // Get the stream data via subscription - reactive updates without re-rendering provider
@@ -73,13 +71,13 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       try {
         await stream.submit(null, {
           command: { resume: { decision } },
-          config: { configurable: { thread_id: threadId, model_id: currentModel, skills_enabled: skillsEnabled } }
+          config: { configurable: { thread_id: threadId, model_id: currentModel, skills_enabled: true } }
         })
       } catch (err) {
         console.error("[ChatContainer] Resume command failed:", err)
       }
     },
-    [pendingApproval, setPendingApproval, stream, threadId, currentModel, skillsEnabled]
+    [pendingApproval, setPendingApproval, stream, threadId, currentModel]
   )
 
   const agentValues = stream?.values as AgentStreamValues | undefined
@@ -117,6 +115,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
             ...(role === "tool" &&
               streamMsg.tool_call_id && { tool_call_id: streamMsg.tool_call_id }),
             ...(role === "tool" && streamMsg.name && { name: streamMsg.name }),
+            ...(role === "tool" && streamMsg.status && { status: streamMsg.status }),
             created_at: new Date()
           }
           appendMessage(storeMsg)
@@ -146,6 +145,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
           ...(role === "tool" &&
             streamMsg.tool_call_id && { tool_call_id: streamMsg.tool_call_id }),
           ...(role === "tool" && streamMsg.name && { name: streamMsg.name }),
+          ...(role === "tool" && streamMsg.status && { status: streamMsg.status }),
           created_at: new Date()
         }
       })
@@ -160,7 +160,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       if (msg.role === "tool" && msg.tool_call_id) {
         results.set(msg.tool_call_id, {
           content: msg.content,
-          is_error: false // Could be enhanced to track errors
+          is_error: msg.status === "error"
         })
       }
     }
@@ -261,7 +261,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       },
       {
         config: {
-          configurable: { thread_id: threadId, model_id: currentModel, skills_enabled: skillsEnabled }
+          configurable: { thread_id: threadId, model_id: currentModel, skills_enabled: true }
         }
       }
     )
@@ -410,12 +410,6 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
                 <ModelSwitcher threadId={threadId} />
                 <div className="h-4 w-px bg-border" />
                 <WorkspacePicker threadId={threadId} />
-                <div className="h-4 w-px bg-border" />
-                <ThreadSkillsPicker
-                  threadId={threadId}
-                  skillsEnabled={skillsEnabled}
-                  setSkillsEnabled={setSkillsEnabled}
-                />
               </div>
               {tokenUsage && (
                 <ContextUsageIndicator tokenUsage={tokenUsage} modelId={currentModel} />

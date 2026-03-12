@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from .api import admin as admin_router
 from .api import agent as agent_router
 from .api import auth as auth_router
+from .api import mcps as mcps_router
 from .api import models as models_router
 from .api import skills as skills_router
-from .api import thread_skills as thread_skills_router
 from .api import threads as threads_router
 from .api import workspace as workspace_router
 from .auth import hash_password
@@ -46,7 +46,7 @@ app.include_router(models_router.router)
 app.include_router(workspace_router.router)
 app.include_router(agent_router.router)
 app.include_router(skills_router.router)
-app.include_router(thread_skills_router.router)
+app.include_router(mcps_router.router)
 
 
 @app.on_event("startup")

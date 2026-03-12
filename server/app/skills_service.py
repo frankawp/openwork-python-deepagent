@@ -196,6 +196,92 @@ def update_materialization_state_for_skill(db: Session, skill_id: str) -> None:
         update_thread_materialization_state(db, thread_id)
 
 
+def _resolve_user_thread_ids(
+    db: Session,
+    *,
+    user_id: str,
+    thread_ids: list[str] | None = None,
+) -> list[str]:
+    if thread_ids is None:
+        return (
+            db.execute(
+                select(Thread.id)
+                .where(Thread.user_id == user_id)
+                .order_by(Thread.created_at.asc(), Thread.id.asc())
+            )
+            .scalars()
+            .all()
+        )
+
+    normalized_ids = sorted({str(thread_id) for thread_id in thread_ids if thread_id})
+    if not normalized_ids:
+        return []
+
+    owned_ids = (
+        db.execute(
+            select(Thread.id).where(
+                Thread.user_id == user_id,
+                Thread.id.in_(normalized_ids),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(owned_ids) != len(normalized_ids):
+        raise ValueError("One or more threads are invalid")
+    return sorted(owned_ids)
+
+
+def _enabled_user_skill_ids(db: Session, *, user_id: str) -> list[str]:
+    return (
+        db.execute(
+            select(Skill.id)
+            .where(Skill.user_id == user_id, Skill.enabled.is_(True))
+            .order_by(Skill.created_at.asc(), Skill.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def sync_user_skill_bindings(
+    db: Session,
+    *,
+    user_id: str,
+    thread_ids: list[str] | None = None,
+) -> list[str]:
+    # SessionLocal is configured with autoflush=False.
+    db.flush()
+    target_thread_ids = _resolve_user_thread_ids(db, user_id=user_id, thread_ids=thread_ids)
+    if not target_thread_ids:
+        return []
+
+    enabled_skill_ids = _enabled_user_skill_ids(db, user_id=user_id)
+    db.query(ThreadSkillBinding).filter(
+        ThreadSkillBinding.thread_id.in_(target_thread_ids)
+    ).delete(synchronize_session=False)
+
+    now = utcnow()
+    for thread_id in target_thread_ids:
+        for position, skill_id in enumerate(enabled_skill_ids):
+            db.add(
+                ThreadSkillBinding(
+                    thread_id=thread_id,
+                    skill_id=skill_id,
+                    position=position,
+                    enabled=True,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+    # SessionLocal is configured with autoflush=False.
+    db.flush()
+    for thread_id in target_thread_ids:
+        update_thread_materialization_state(db, thread_id)
+    return target_thread_ids
+
+
 def claim_next_dirty_thread(db: Session) -> MaterializationClaim | None:
     row = (
         db.execute(

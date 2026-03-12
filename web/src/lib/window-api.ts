@@ -87,16 +87,10 @@ export function attachWindowApi() {
     updated_at: file?.updated_at ? new Date(file.updated_at) : new Date()
   })
 
-  const normalizeThreadSkillBinding = (binding: any) => ({
-    ...binding,
-    created_at: binding?.created_at ? new Date(binding.created_at) : new Date(),
-    updated_at: binding?.updated_at ? new Date(binding.updated_at) : new Date(),
-    skill: normalizeSkill(binding?.skill)
-  })
-
-  const normalizeMaterializationState = (state: any) => ({
-    ...state,
-    updated_at: state?.updated_at ? new Date(state.updated_at) : new Date()
+  const normalizeMcp = (mcp: any) => ({
+    ...mcp,
+    created_at: mcp?.created_at ? new Date(mcp.created_at) : new Date(),
+    updated_at: mcp?.updated_at ? new Date(mcp.updated_at) : new Date()
   })
 
   const api = {
@@ -248,22 +242,43 @@ export function attachWindowApi() {
           method: "DELETE"
         })
     },
-    threadSkills: {
-      list: (threadId: string) =>
-        apiFetch(`/thread-skills/${threadId}`).then((items: any[]) =>
-          items.map(normalizeThreadSkillBinding)
-        ),
-      set: (threadId: string, skillIds: string[]) =>
-        apiFetch(`/thread-skills/${threadId}`, {
-          method: "PUT",
-          body: JSON.stringify({ skill_ids: skillIds })
-        }).then((items: any[]) => items.map(normalizeThreadSkillBinding)),
-      remove: (threadId: string, skillId: string) =>
-        apiFetch(`/thread-skills/${threadId}/${skillId}`, {
-          method: "DELETE"
-        }),
-      getMaterializationState: (threadId: string) =>
-        apiFetch(`/thread-skills/${threadId}/materialization`).then(normalizeMaterializationState)
+    mcps: {
+      list: () => apiFetch("/mcps").then((items: any[]) => items.map(normalizeMcp)),
+      get: (mcpId: string) => apiFetch(`/mcps/${mcpId}`).then(normalizeMcp),
+      create: (payload: {
+        key: string
+        name: string
+        description: string
+        transport: "streamable_http" | "sse" | "stdio"
+        config: Record<string, unknown>
+        secret?: Record<string, unknown>
+        enabled?: boolean
+      }) =>
+        apiFetch("/mcps", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        }).then(normalizeMcp),
+      update: (
+        mcpId: string,
+        payload: {
+          name?: string
+          description?: string
+          transport?: "streamable_http" | "sse" | "stdio"
+          config?: Record<string, unknown>
+          secret?: Record<string, unknown> | null
+          enabled?: boolean
+        }
+      ) =>
+        apiFetch(`/mcps/${mcpId}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload)
+        }).then(normalizeMcp),
+      delete: (mcpId: string) => apiFetch(`/mcps/${mcpId}`, { method: "DELETE" }),
+      test: (mcpId: string, threadId?: string) =>
+        apiFetch(`/mcps/${mcpId}/test`, {
+          method: "POST",
+          body: threadId ? JSON.stringify({ thread_id: threadId }) : undefined
+        })
     },
     workspace: {
       get: (threadId?: string) => {

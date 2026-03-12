@@ -25,7 +25,8 @@ dependencies = [
   "langchain-deepseek>=1.0.1",
   "langchain-daytona>=0.0.3",
   "langgraph>=0.2",
-  "langgraph-checkpoint>=0.0.12"
+  "langgraph-checkpoint>=0.0.12",
+  "langchain-mcp-adapters>=0.2.1",
 ]
 
 [tool.uv]

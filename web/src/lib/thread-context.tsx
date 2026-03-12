@@ -583,6 +583,7 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
                   tool_calls?: unknown[]
                   tool_call_id?: string
                   name?: string
+                  status?: "success" | "error"
                 }>
                 todos?: Array<{ id?: string; content?: string; status?: string }>
                 __interrupt__?: Array<{
@@ -631,6 +632,7 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
                 tool_calls: msg.tool_calls as Message["tool_calls"],
                 ...(role === "tool" && msg.tool_call_id && { tool_call_id: msg.tool_call_id }),
                 ...(role === "tool" && msg.name && { name: msg.name }),
+                ...(role === "tool" && msg.status && { status: msg.status }),
                 created_at: new Date()
               }
             })
