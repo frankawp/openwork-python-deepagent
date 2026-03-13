@@ -17,6 +17,8 @@ sandbox:
   #   DAYTONA_API_KEY
   #   DAYTONA_API_URL
   #   DAYTONA_TARGET
+  # Optional:
+  #   DAYTONA_SNAPSHOT (preferred prebuilt snapshot for new thread sandboxes)
   enabled: true
   time_limit_sec: 120
   max_output_bytes: 100000

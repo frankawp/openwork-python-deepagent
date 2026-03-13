@@ -164,6 +164,7 @@ export interface MCPServer {
   description: string
   transport: MCPTransport
   config: Record<string, unknown>
+  has_secret?: boolean
   enabled: boolean
   created_at: Date
   updated_at: Date

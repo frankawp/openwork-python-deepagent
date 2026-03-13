@@ -20,7 +20,7 @@ function deriveNewMcpKey(mcps: MCPServer[]): string {
 
 function defaultConfigForTransport(transport: MCPTransport): string {
   if (transport === "stdio") {
-    return JSON.stringify({ command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem"] }, null, 2)
+    return JSON.stringify({ command: "mcp-server-filesystem", args: ["/home/daytona"] }, null, 2)
   }
   return JSON.stringify({ url: "http://127.0.0.1:8001/mcp" }, null, 2)
 }
@@ -30,6 +30,15 @@ function defaultSecretForTransport(transport: MCPTransport): string {
     return JSON.stringify({ env: {} }, null, 2)
   }
   return JSON.stringify({ headers: {} }, null, 2)
+}
+
+function secretPlaceholderForTransport(transport: MCPTransport, keepCurrent: boolean): string {
+  if (transport === "stdio") {
+    const base = '{"env":{"STARROCKS_HOST":"...","STARROCKS_PORT":"9030","STARROCKS_USER":"...","STARROCKS_PASSWORD":"..."}}'
+    return keepCurrent ? `Leave empty to keep current secret; or set ${base}` : base
+  }
+  const base = '{"headers":{"Authorization":"Bearer ..."}}'
+  return keepCurrent ? `Leave empty to keep current secret; or set ${base}` : base
 }
 
 function prettyJson(value: unknown): string {
@@ -271,7 +280,7 @@ export function McpManager(): React.JSX.Element {
             value={newSecretDraft}
             onChange={(e) => setNewSecretDraft(e.target.value)}
             className="h-20 w-full resize-none rounded-md border border-input bg-transparent p-2 text-xs font-mono"
-            placeholder='{"headers":{"Authorization":"Bearer ..." }}'
+            placeholder={secretPlaceholderForTransport(newTransport, false)}
           />
           <Button
             size="sm"
@@ -357,12 +366,36 @@ export function McpManager(): React.JSX.Element {
                   className="h-40 w-full resize-none rounded-md border border-input bg-transparent p-2 text-xs font-mono"
                   placeholder='{"url":"http://127.0.0.1:8001/mcp"}'
                 />
-                <textarea
-                  value={editSecretDraft}
-                  onChange={(e) => setEditSecretDraft(e.target.value)}
-                  className="h-40 w-full resize-none rounded-md border border-input bg-transparent p-2 text-xs font-mono"
-                  placeholder='Leave empty to keep current secret; or set {"headers":{"Authorization":"Bearer ..."}}'
-                />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                        selectedMcp.has_secret
+                          ? "border-status-nominal/40 bg-status-nominal/10 text-status-nominal"
+                          : "border-border bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {selectedMcp.has_secret ? "Configured" : "Not configured"}
+                    </span>
+                    <span>Secret is write-only and will not be displayed.</span>
+                  </div>
+                  <textarea
+                    value={editSecretDraft}
+                    onChange={(e) => setEditSecretDraft(e.target.value)}
+                    className="h-32 w-full resize-none rounded-md border border-input bg-transparent p-2 text-xs font-mono"
+                    placeholder={secretPlaceholderForTransport(editTransport, true)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setEditSecretDraft(defaultSecretForTransport(editTransport))}
+                    disabled={saving}
+                  >
+                    Use Secret Template
+                  </Button>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" onClick={() => void handleSaveMcp()} className="gap-2" disabled={saving}>

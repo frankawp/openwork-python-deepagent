@@ -124,6 +124,7 @@ class MCPServerOut(BaseModel):
     description: str
     transport: MCPTransport
     config: dict[str, Any]
+    has_secret: bool = False
     enabled: bool
     created_at: dt.datetime
     updated_at: dt.datetime

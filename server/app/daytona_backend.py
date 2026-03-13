@@ -13,6 +13,7 @@ _DAYTONA_THREAD_KEY = "daytona"
 _DAYTONA_SANDBOX_ID_KEY = "sandbox_id"
 _DAYTONA_WORKSPACE_ROOT_KEY = "workspace_root"
 _DAYTONA_DEFAULT_WORKSPACE_ROOT = "/home/daytona"
+_DAYTONA_SNAPSHOT_ENV = "DAYTONA_SNAPSHOT"
 logger = logging.getLogger(__name__)
 
 
@@ -158,6 +159,7 @@ def _create_daytona_client():
 
 def _create_daytona_sandbox(*, daytona: Any, create_params_cls: Any, thread_id: str) -> Any:
     cfg = load_config()
+    snapshot_name = (os.environ.get(_DAYTONA_SNAPSHOT_ENV) or "").strip()
     base_kwargs = {
         "language": "python",
         "labels": {
@@ -165,16 +167,28 @@ def _create_daytona_sandbox(*, daytona: Any, create_params_cls: Any, thread_id: 
             "openwork_thread_id": thread_id,
         },
     }
+    if snapshot_name:
+        base_kwargs["snapshot"] = snapshot_name
     lifecycle_kwargs = {
         "auto_stop_interval": cfg.sandbox.daytona_auto_stop_interval_min,
         "auto_archive_interval": cfg.sandbox.daytona_auto_archive_interval_days,
         "auto_delete_interval": cfg.sandbox.daytona_auto_delete_interval_days,
     }
+    params = None
     try:
         params = create_params_cls(**base_kwargs, **lifecycle_kwargs)
-    except TypeError:
+    except TypeError as lifecycle_err:
         # Backward compatibility for SDK versions without lifecycle args.
-        params = create_params_cls(**base_kwargs)
+        try:
+            params = create_params_cls(**base_kwargs)
+        except TypeError:
+            if "snapshot" in base_kwargs:
+                # Backward compatibility for SDK versions without snapshot args.
+                snapshotless_kwargs = dict(base_kwargs)
+                snapshotless_kwargs.pop("snapshot", None)
+                params = create_params_cls(**snapshotless_kwargs)
+            else:
+                raise lifecycle_err
     return daytona.create(params=params, timeout=120)
 
 

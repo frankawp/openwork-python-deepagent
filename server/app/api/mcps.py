@@ -50,6 +50,7 @@ def _to_mcp_out(server: MCPServer) -> MCPServerOut:
         description=server.description,
         transport=server.transport,  # type: ignore[arg-type]
         config=server.config_json if isinstance(server.config_json, dict) else {},
+        has_secret=bool(server.encrypted_secret_json),
         enabled=server.enabled,
         created_at=server.created_at,
         updated_at=server.updated_at,

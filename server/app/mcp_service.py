@@ -184,8 +184,6 @@ def _ensure_daytona_mcp_gateway(
         env=env,
     )
     gateway_parts = [
-        "npx",
-        "-y",
         "supergateway",
         "--stdio",
         stdio_command,
@@ -199,7 +197,7 @@ def _ensure_daytona_mcp_gateway(
     gateway_command = " ".join(shlex.quote(part) for part in gateway_parts)
 
     startup_script = f"""
-set -euo pipefail
+set -eu
 ROOT={shlex.quote(DAYTONA_MCP_PROXY_DIR)}
 NAME={shlex.quote(process_name)}
 PORT={port}
@@ -217,8 +215,8 @@ for node_bin in /usr/local/nvm/versions/node/*/bin; do
 done
 export PATH
 
-if ! command -v npx >/dev/null 2>&1; then
-  echo "npx is required but not found in sandbox PATH: $PATH" >&2
+if ! command -v supergateway >/dev/null 2>&1; then
+  echo "supergateway is required but not found in sandbox PATH: $PATH" >&2
   exit 1
 fi
 
@@ -403,6 +401,11 @@ def build_mcp_client_entry(
     if daytona_sandbox is not None:
         if not thread_id:
             raise ValueError("thread_id is required when building MCP entries for Daytona sandbox")
+        if command.lower() == "npx":
+            raise ValueError(
+                f"MCP '{server.key}' uses command 'npx', which is not allowed in sandbox zero-install mode. "
+                "Use a preinstalled executable command instead."
+            )
         return _build_daytona_mcp_client_entry(
             server_key=server.key,
             thread_id=thread_id,
