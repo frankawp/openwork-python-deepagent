@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import unittest
 from unittest.mock import patch
 
-from app.api.agent import _agent_stream
+from app.api.agent import (
+    _ACTIVE_STREAM_TASKS,
+    _ACTIVE_STREAM_TASKS_LOCK,
+    _agent_stream,
+    _register_active_stream_task,
+    _unregister_active_stream_task,
+    cancel_agent,
+)
 from app.deep_agent_runtime import RuntimeCreationResult
-from app.schemas import AgentStreamRequest
+from app.schemas import AgentCancelRequest, AgentStreamRequest
 
 
 class _FakeAgent:
@@ -74,6 +82,99 @@ class AgentStreamMCPWarningTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(events[-1]["type"], "done")
         self.assertFalse(any(event.get("type") == "warning" for event in events))
+
+
+class AgentStreamCancellationTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        await self._reset_registry()
+
+    async def asyncTearDown(self) -> None:
+        await self._reset_registry()
+
+    async def _reset_registry(self) -> None:
+        async with _ACTIVE_STREAM_TASKS_LOCK:
+            tasks = list(_ACTIVE_STREAM_TASKS.values())
+            _ACTIVE_STREAM_TASKS.clear()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def test_cancel_endpoint_cancels_active_stream_and_cleans_registry(self) -> None:
+        registered = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def _runner() -> None:
+            await _register_active_stream_task("thread-cancel")
+            registered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            finally:
+                await _unregister_active_stream_task("thread-cancel")
+
+        task = asyncio.create_task(_runner())
+        await asyncio.wait_for(registered.wait(), timeout=1)
+
+        result = await cancel_agent(
+            AgentCancelRequest(thread_id="thread-cancel"),
+            _user=object(),
+        )
+        self.assertEqual(result, {"success": True, "cancelled": True})
+
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        self.assertTrue(cancelled.is_set())
+
+        async with _ACTIVE_STREAM_TASKS_LOCK:
+            self.assertNotIn("thread-cancel", _ACTIVE_STREAM_TASKS)
+
+        second_result = await cancel_agent(
+            AgentCancelRequest(thread_id="thread-cancel"),
+            _user=object(),
+        )
+        self.assertEqual(second_result, {"success": True, "cancelled": False})
+
+    async def test_registering_new_stream_cancels_existing_stream_for_same_thread(self) -> None:
+        first_registered = asyncio.Event()
+        second_registered = asyncio.Event()
+        first_cancelled = asyncio.Event()
+        second_cancelled = asyncio.Event()
+
+        async def _runner(registered: asyncio.Event, cancelled: asyncio.Event) -> None:
+            await _register_active_stream_task("thread-replace")
+            registered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            finally:
+                await _unregister_active_stream_task("thread-replace")
+
+        first_task = asyncio.create_task(_runner(first_registered, first_cancelled))
+        await asyncio.wait_for(first_registered.wait(), timeout=1)
+
+        second_task = asyncio.create_task(_runner(second_registered, second_cancelled))
+        await asyncio.wait_for(second_registered.wait(), timeout=1)
+        await asyncio.wait_for(first_cancelled.wait(), timeout=1)
+
+        with self.assertRaises(asyncio.CancelledError):
+            await first_task
+
+        async with _ACTIVE_STREAM_TASKS_LOCK:
+            self.assertIs(_ACTIVE_STREAM_TASKS.get("thread-replace"), second_task)
+
+        second_task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await second_task
+        self.assertTrue(second_cancelled.is_set())
+
+        async with _ACTIVE_STREAM_TASKS_LOCK:
+            self.assertNotIn("thread-replace", _ACTIVE_STREAM_TASKS)
 
 
 if __name__ == "__main__":

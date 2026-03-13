@@ -176,6 +176,10 @@ class AgentInterruptRequest(BaseModel):
     skills_enabled: bool = True
 
 
+class AgentCancelRequest(BaseModel):
+    thread_id: str
+
+
 class WorkspaceFile(BaseModel):
     path: str
     is_dir: bool

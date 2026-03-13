@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import AsyncGenerator
 
@@ -16,9 +17,48 @@ from ..deep_agent_runtime import (
 )
 from ..deps import get_current_user
 from ..models import User
-from ..schemas import AgentInterruptRequest, AgentStreamRequest
+from ..schemas import AgentCancelRequest, AgentInterruptRequest, AgentStreamRequest
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+_ACTIVE_STREAM_TASKS: dict[str, asyncio.Task[None]] = {}
+_ACTIVE_STREAM_TASKS_LOCK = asyncio.Lock()
+
+
+async def _register_active_stream_task(thread_id: str) -> None:
+    task = asyncio.current_task()
+    if task is None:
+        return
+
+    existing_task: asyncio.Task[None] | None = None
+    async with _ACTIVE_STREAM_TASKS_LOCK:
+        existing_task = _ACTIVE_STREAM_TASKS.get(thread_id)
+        _ACTIVE_STREAM_TASKS[thread_id] = task
+
+    if existing_task and existing_task is not task and not existing_task.done():
+        existing_task.cancel()
+
+
+async def _unregister_active_stream_task(thread_id: str) -> None:
+    task = asyncio.current_task()
+    async with _ACTIVE_STREAM_TASKS_LOCK:
+        existing = _ACTIVE_STREAM_TASKS.get(thread_id)
+        if existing is None:
+            return
+        if task is None or existing is task or existing.done():
+            _ACTIVE_STREAM_TASKS.pop(thread_id, None)
+
+
+async def _cancel_active_stream_task(thread_id: str) -> bool:
+    async with _ACTIVE_STREAM_TASKS_LOCK:
+        task = _ACTIVE_STREAM_TASKS.get(thread_id)
+        if task is None:
+            return False
+        if task.done():
+            _ACTIVE_STREAM_TASKS.pop(thread_id, None)
+            return False
+
+    task.cancel()
+    return True
 
 
 def _serialize_sse(payload: dict) -> str:
@@ -109,106 +149,118 @@ async def _stream_sse(stream) -> AsyncGenerator[str, None]:
 
 
 async def _agent_stream(payload: AgentStreamRequest) -> AsyncGenerator[str, None]:
-    model_candidates = [payload.model_id]
-    if should_fallback_to_deepseek_chat(payload.model_id):
-        model_candidates.append(DEEPSEEK_CHAT_MODEL_ID)
+    await _register_active_stream_task(payload.thread_id)
+    try:
+        model_candidates = [payload.model_id]
+        if should_fallback_to_deepseek_chat(payload.model_id):
+            model_candidates.append(DEEPSEEK_CHAT_MODEL_ID)
 
-    last_error: Exception | None = None
-    for index, model_id in enumerate(model_candidates):
-        emitted_any = False
-        try:
-            runtime = await create_runtime(
-                thread_id=payload.thread_id,
-                model_id=model_id,
-                skills_enabled=payload.skills_enabled,
-            )
-            agent = runtime.agent
-            if runtime.mcp_degraded:
-                yield _serialize_warning(
-                    warning_type="mcp_degraded",
-                    message="MCP services are unavailable. Continuing without MCP tools.",
-                    reason=runtime.mcp_degraded_reason,
+        last_error: Exception | None = None
+        for index, model_id in enumerate(model_candidates):
+            emitted_any = False
+            try:
+                runtime = await create_runtime(
+                    thread_id=payload.thread_id,
+                    model_id=model_id,
+                    skills_enabled=payload.skills_enabled,
                 )
+                agent = runtime.agent
+                if runtime.mcp_degraded:
+                    yield _serialize_warning(
+                        warning_type="mcp_degraded",
+                        message="MCP services are unavailable. Continuing without MCP tools.",
+                        reason=runtime.mcp_degraded_reason,
+                    )
 
-            config = {"configurable": {"thread_id": payload.thread_id}}
+                config = {"configurable": {"thread_id": payload.thread_id}}
 
-            if payload.command and payload.command.get("resume") is not None:
-                resume = _normalize_resume(payload.command.get("resume"))
+                if payload.command and payload.command.get("resume") is not None:
+                    resume = _normalize_resume(payload.command.get("resume"))
+                    command = Command(resume=resume)
+                    stream = agent.astream(
+                        command,
+                        config,
+                        stream_mode=["messages", "values", "updates"],
+                    )
+                else:
+                    stream = agent.astream(
+                        {"messages": [{"role": "user", "content": payload.message}]},
+                        config,
+                        stream_mode=["messages", "values", "updates"],
+                    )
+
+                async for chunk in _stream_sse(stream):
+                    emitted_any = True
+                    yield chunk
+
+                yield _serialize_sse({"type": "done"})
+                return
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                last_error = e
+                is_primary_attempt = index == 0
+                has_fallback = len(model_candidates) > 1
+                if is_primary_attempt and has_fallback and not emitted_any:
+                    continue
+                message = str(last_error) or repr(last_error)
+                yield _serialize_sse({"type": "error", "error": message})
+                return
+    finally:
+        await _unregister_active_stream_task(payload.thread_id)
+
+
+async def _agent_interrupt(payload: AgentInterruptRequest) -> AsyncGenerator[str, None]:
+    await _register_active_stream_task(payload.thread_id)
+    try:
+        model_candidates = [payload.model_id]
+        if should_fallback_to_deepseek_chat(payload.model_id):
+            model_candidates.append(DEEPSEEK_CHAT_MODEL_ID)
+
+        last_error: Exception | None = None
+        for index, model_id in enumerate(model_candidates):
+            emitted_any = False
+            try:
+                runtime = await create_runtime(
+                    thread_id=payload.thread_id,
+                    model_id=model_id,
+                    skills_enabled=payload.skills_enabled,
+                )
+                agent = runtime.agent
+                if runtime.mcp_degraded:
+                    yield _serialize_warning(
+                        warning_type="mcp_degraded",
+                        message="MCP services are unavailable. Continuing without MCP tools.",
+                        reason=runtime.mcp_degraded_reason,
+                    )
+                config = {"configurable": {"thread_id": payload.thread_id}}
+                resume = _normalize_resume(payload.decision)
                 command = Command(resume=resume)
                 stream = agent.astream(
                     command,
                     config,
                     stream_mode=["messages", "values", "updates"],
                 )
-            else:
-                stream = agent.astream(
-                    {"messages": [{"role": "user", "content": payload.message}]},
-                    config,
-                    stream_mode=["messages", "values", "updates"],
-                )
 
-            async for chunk in _stream_sse(stream):
-                emitted_any = True
-                yield chunk
+                async for chunk in _stream_sse(stream):
+                    emitted_any = True
+                    yield chunk
 
-            yield _serialize_sse({"type": "done"})
-            return
-        except Exception as e:
-            last_error = e
-            is_primary_attempt = index == 0
-            has_fallback = len(model_candidates) > 1
-            if is_primary_attempt and has_fallback and not emitted_any:
-                continue
-            message = str(last_error) or repr(last_error)
-            yield _serialize_sse({"type": "error", "error": message})
-            return
-
-
-async def _agent_interrupt(payload: AgentInterruptRequest) -> AsyncGenerator[str, None]:
-    model_candidates = [payload.model_id]
-    if should_fallback_to_deepseek_chat(payload.model_id):
-        model_candidates.append(DEEPSEEK_CHAT_MODEL_ID)
-
-    last_error: Exception | None = None
-    for index, model_id in enumerate(model_candidates):
-        emitted_any = False
-        try:
-            runtime = await create_runtime(
-                thread_id=payload.thread_id,
-                model_id=model_id,
-                skills_enabled=payload.skills_enabled,
-            )
-            agent = runtime.agent
-            if runtime.mcp_degraded:
-                yield _serialize_warning(
-                    warning_type="mcp_degraded",
-                    message="MCP services are unavailable. Continuing without MCP tools.",
-                    reason=runtime.mcp_degraded_reason,
-                )
-            config = {"configurable": {"thread_id": payload.thread_id}}
-            resume = _normalize_resume(payload.decision)
-            command = Command(resume=resume)
-            stream = agent.astream(
-                command,
-                config,
-                stream_mode=["messages", "values", "updates"],
-            )
-
-            async for chunk in _stream_sse(stream):
-                emitted_any = True
-                yield chunk
-
-            yield _serialize_sse({"type": "done"})
-            return
-        except Exception as e:
-            last_error = e
-            is_primary_attempt = index == 0
-            has_fallback = len(model_candidates) > 1
-            if is_primary_attempt and has_fallback and not emitted_any:
-                continue
-            message = str(last_error) or repr(last_error)
-            yield _serialize_sse({"type": "error", "error": message})
-            return
+                yield _serialize_sse({"type": "done"})
+                return
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                last_error = e
+                is_primary_attempt = index == 0
+                has_fallback = len(model_candidates) > 1
+                if is_primary_attempt and has_fallback and not emitted_any:
+                    continue
+                message = str(last_error) or repr(last_error)
+                yield _serialize_sse({"type": "error", "error": message})
+                return
+    finally:
+        await _unregister_active_stream_task(payload.thread_id)
 
 
 @router.post("/stream")
@@ -221,3 +273,9 @@ def stream_agent(payload: AgentStreamRequest, _user: User = Depends(get_current_
 def interrupt_agent(payload: AgentInterruptRequest, _user: User = Depends(get_current_user)):
     generator = _agent_interrupt(payload)
     return StreamingResponse(generator, media_type="text/event-stream")
+
+
+@router.post("/cancel")
+async def cancel_agent(payload: AgentCancelRequest, _user: User = Depends(get_current_user)):
+    cancelled = await _cancel_active_stream_task(payload.thread_id)
+    return {"success": True, "cancelled": cancelled}

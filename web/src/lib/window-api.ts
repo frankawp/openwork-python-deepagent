@@ -30,12 +30,19 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   return (await res.json()) as T
 }
 
-function parseSSE(stream: ReadableStream<Uint8Array>, onEvent: (data: any) => void) {
+async function parseSSE(
+  stream: ReadableStream<Uint8Array>,
+  onEvent: (data: any) => void,
+  signal: AbortSignal
+): Promise<{ receivedTerminal: boolean }> {
   const reader = stream.getReader()
+  const decoder = new TextDecoder()
   let buffer = ""
+  let receivedTerminal = false
 
-  function processChunk(text: string) {
+  const processChunk = (text: string) => {
     buffer += text
+    buffer = buffer.replace(/\r\n/g, "\n")
     const parts = buffer.split("\n\n")
     buffer = parts.pop() || ""
 
@@ -46,7 +53,11 @@ function parseSSE(stream: ReadableStream<Uint8Array>, onEvent: (data: any) => vo
           const payload = line.slice(5).trim()
           if (payload) {
             try {
-              onEvent(JSON.parse(payload))
+              const event = JSON.parse(payload)
+              if (event?.type === "done" || event?.type === "error") {
+                receivedTerminal = true
+              }
+              onEvent(event)
             } catch {
               // ignore
             }
@@ -56,17 +67,23 @@ function parseSSE(stream: ReadableStream<Uint8Array>, onEvent: (data: any) => vo
     }
   }
 
-  function read() {
-    reader.read().then(({ done, value }) => {
-      if (done) return
-      const text = new TextDecoder().decode(value)
-      processChunk(text)
-      read()
-    })
+  const abortReader = () => {
+    void reader.cancel().catch(() => {})
   }
-
-  read()
-  return () => reader.cancel()
+  signal.addEventListener("abort", abortReader)
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      processChunk(decoder.decode(value, { stream: true }))
+      if (signal.aborted) break
+    }
+    processChunk(decoder.decode())
+  } finally {
+    signal.removeEventListener("abort", abortReader)
+    reader.releaseLock()
+  }
+  return { receivedTerminal }
 }
 
 export function attachWindowApi() {
@@ -93,6 +110,46 @@ export function attachWindowApi() {
     updated_at: mcp?.updated_at ? new Date(mcp.updated_at) : new Date()
   })
 
+  const streamWithSSE = async (
+    endpoint: string,
+    payload: Record<string, unknown>,
+    onEvent: (event: unknown) => void,
+    controller: AbortController,
+    isAborted: () => boolean
+  ) => {
+    const emit = (event: unknown): void => {
+      onEvent(event)
+    }
+    const emitError = (error: string): void => {
+      emit({ type: "error", error })
+    }
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    })
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "")
+      const statusText = text || response.statusText || "Request failed"
+      emitError(`HTTP_${response.status}: ${statusText}`)
+      return
+    }
+
+    if (!response.body) {
+      emitError("EMPTY_STREAM_BODY")
+      return
+    }
+
+    const { receivedTerminal } = await parseSSE(response.body, emit, controller.signal)
+    if (!isAborted() && !receivedTerminal) {
+      emitError("STREAM_CLOSED")
+    }
+  }
+
   const api = {
     auth: {
       login: (email: string, password: string) =>
@@ -110,30 +167,30 @@ export function attachWindowApi() {
         skillsEnabled?: boolean
       ) => {
         const controller = new AbortController()
-        fetch(`${API_BASE}/agent/stream`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            thread_id: threadId,
-            message,
-            command,
-            model_id: modelId,
-            skills_enabled: skillsEnabled ?? true
-          }),
-          signal: controller.signal
-        })
-          .then((res) => {
-            if (!res.body) return
-            const cleanup = parseSSE(res.body, (data) => onEvent(data))
-            // tie cleanup to abort
-            controller.signal.addEventListener("abort", () => cleanup())
-          })
+        let abortedByClient = false
+        streamWithSSE(
+            "/agent/stream",
+            {
+              thread_id: threadId,
+              message,
+              command,
+              model_id: modelId,
+              skills_enabled: skillsEnabled ?? true
+            },
+            onEvent,
+            controller,
+            () => abortedByClient
+          )
           .catch(() => {
-            onEvent({ type: "error", error: "STREAM_ERROR" })
+            if (!abortedByClient) {
+              onEvent({ type: "error", error: "STREAM_ERROR" })
+            }
           })
 
-        return () => controller.abort()
+        return () => {
+          abortedByClient = true
+          controller.abort()
+        }
       },
       interrupt: (
         threadId: string,
@@ -143,32 +200,35 @@ export function attachWindowApi() {
         skillsEnabled?: boolean
       ) => {
         const controller = new AbortController()
-        fetch(`${API_BASE}/agent/interrupt`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            thread_id: threadId,
-            decision,
-            model_id: modelId,
-            skills_enabled: skillsEnabled ?? true
-          }),
-          signal: controller.signal
-        })
-          .then((res) => {
-            if (!res.body) return
-            const cleanup = parseSSE(res.body, (data) => onEvent(data))
-            controller.signal.addEventListener("abort", () => cleanup())
-          })
+        let abortedByClient = false
+        streamWithSSE(
+            "/agent/interrupt",
+            {
+              thread_id: threadId,
+              decision,
+              model_id: modelId,
+              skills_enabled: skillsEnabled ?? true
+            },
+            onEvent,
+            controller,
+            () => abortedByClient
+          )
           .catch(() => {
-            onEvent({ type: "error", error: "STREAM_ERROR" })
+            if (!abortedByClient) {
+              onEvent({ type: "error", error: "STREAM_ERROR" })
+            }
           })
 
-        return () => controller.abort()
+        return () => {
+          abortedByClient = true
+          controller.abort()
+        }
       },
-      cancel: async (_threadId: string) => {
-        return
-      }
+      cancel: async (threadId: string) =>
+        apiFetch("/agent/cancel", {
+          method: "POST",
+          body: JSON.stringify({ thread_id: threadId })
+        })
     },
     threads: {
       list: () => apiFetch("/threads").then((items: any[]) => items.map(normalizeThread)),
@@ -290,23 +350,14 @@ export function attachWindowApi() {
         if (!threadId) return Promise.resolve(null)
         return apiFetch(`/workspace?thread_id=${threadId}`).then((res: any) => res.path ?? null)
       },
-      loadTree: (threadId: string, path: string = "/", depth: number = 2) =>
+      loadTree: (threadId: string, path: string = "/") =>
         apiFetch(
-          `/workspace/tree?thread_id=${threadId}&path=${encodeURIComponent(path)}&depth=${depth}`
+          `/workspace/tree?thread_id=${threadId}&path=${encodeURIComponent(path)}&depth=2`
         ),
       readFile: (threadId: string, filePath: string) =>
         apiFetch(`/workspace/file?thread_id=${threadId}&path=${encodeURIComponent(filePath)}`),
       readBinaryFile: (threadId: string, filePath: string) =>
-        apiFetch(`/workspace/file-binary?thread_id=${threadId}&path=${encodeURIComponent(filePath)}`),
-      syncToDisk: (threadId: string) =>
-        apiFetch("/workspace/sync", {
-          method: "POST",
-          body: JSON.stringify({ thread_id: threadId })
-        }),
-      onFilesChanged: (callback: (data: { threadId: string; workspacePath: string }) => void) => {
-        void callback
-        return () => {}
-      }
+        apiFetch(`/workspace/file-binary?thread_id=${threadId}&path=${encodeURIComponent(filePath)}`)
     }
   }
 

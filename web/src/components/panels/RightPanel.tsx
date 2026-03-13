@@ -571,7 +571,7 @@ function FilesContent(): React.JSX.Element {
       setLoadingDirs(new Set(loadingDirsRef.current))
 
       try {
-        const result = await window.api.workspace.loadTree(currentThreadId, normalizedDir, 2)
+        const result = await window.api.workspace.loadTree(currentThreadId, normalizedDir)
         if (result.success && Array.isArray(result.files)) {
           setWorkspaceFiles((prev) => mergeFileLists(prev, result.files))
           loadedDirsRef.current.add(normalizedDir)

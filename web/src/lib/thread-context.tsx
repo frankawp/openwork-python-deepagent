@@ -590,7 +590,7 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
           const metadata = thread.metadata || {}
           if (metadata.workspacePath) {
             actions.setWorkspacePath(metadata.workspacePath as string)
-            const treeResult = await window.api.workspace.loadTree(threadId, "/", 2)
+            const treeResult = await window.api.workspace.loadTree(threadId, "/")
             if (treeResult.success) {
               actions.setWorkspaceFiles(treeResult.files)
             }

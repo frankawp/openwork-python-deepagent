@@ -46,6 +46,7 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
     notice: threadNotice,
     tokenUsage,
     currentModel,
+    skillsEnabled,
     draftInput: input,
     setTodos,
     setPendingApproval,
@@ -73,13 +74,19 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       try {
         await stream.submit(null, {
           command: { resume: { decision } },
-          config: { configurable: { thread_id: threadId, model_id: currentModel, skills_enabled: true } }
+          config: {
+            configurable: {
+              thread_id: threadId,
+              model_id: currentModel,
+              skills_enabled: skillsEnabled
+            }
+          }
         })
       } catch (err) {
         console.error("[ChatContainer] Resume command failed:", err)
       }
     },
-    [pendingApproval, setPendingApproval, stream, threadId, currentModel]
+    [pendingApproval, setPendingApproval, stream, threadId, currentModel, skillsEnabled]
   )
 
   const agentValues = stream?.values as AgentStreamValues | undefined
@@ -263,7 +270,11 @@ export function ChatContainer({ threadId }: ChatContainerProps): React.JSX.Eleme
       },
       {
         config: {
-          configurable: { thread_id: threadId, model_id: currentModel, skills_enabled: true }
+          configurable: {
+            thread_id: threadId,
+            model_id: currentModel,
+            skills_enabled: skillsEnabled
+          }
         }
       }
     )

@@ -216,6 +216,7 @@ export class ElectronIPCTransport implements UseStreamTransport {
     // Handle abort signal
     if (signal) {
       signal.addEventListener("abort", () => {
+        void window.api.agent.cancel(threadId).catch(() => {})
         cleanup()
         isDone = true
         if (resolveNext) {
