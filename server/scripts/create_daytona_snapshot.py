@@ -19,6 +19,7 @@ Usage examples:
 from __future__ import annotations
 
 import argparse
+import base64
 import textwrap
 import os
 import sys
@@ -129,7 +130,7 @@ def _build_image() -> Image:
         “请先告诉我你会怎么做，再开始执行。”
         """
     ).strip()
-    escaped_readme = readme_content.replace("\\", "\\\\").replace("'", "'\"'\"'")
+    encoded_readme = base64.b64encode(readme_content.encode("utf-8")).decode("ascii")
     commands = [
         "apt-get update",
         (
@@ -155,7 +156,11 @@ def _build_image() -> Image:
         "npm config set update-notifier false",
         f"npm install -g supergateway @modelcontextprotocol/server-filesystem {fetch_pkg}",
         "mkdir -p /home/daytona",
-        f"printf '%s\\n' '{escaped_readme}' > /home/daytona/readme.md",
+        (
+            "python -c \"import base64,pathlib; "
+            "pathlib.Path('/home/daytona/readme.md').write_bytes("
+            f"base64.b64decode('{encoded_readme}'))\""
+        ),
     ]
     commands.append("python -m pip install --no-cache-dir mcp-server-starrocks")
     return Image.debian_slim("3.12").run_commands(*commands).workdir("/home/daytona")
