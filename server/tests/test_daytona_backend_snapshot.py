@@ -42,22 +42,25 @@ class _NoLifecycleParams:
 
 
 class DaytonaSnapshotBindingTests(unittest.TestCase):
-    def _fake_cfg(self):  # type: ignore[no-untyped-def]
+    def _fake_cfg(self, *, snapshot: str | None = None):  # type: ignore[no-untyped-def]
         return types.SimpleNamespace(
             sandbox=types.SimpleNamespace(
                 daytona_auto_stop_interval_min=0,
                 daytona_auto_archive_interval_days=0,
                 daytona_auto_delete_interval_days=-1,
-            )
+            ),
+            daytona=types.SimpleNamespace(
+                api_key="key",
+                api_url="https://example.com/api",
+                target="us",
+                snapshot=snapshot,
+            ),
         )
 
     def test_create_sandbox_passes_snapshot_when_env_is_set(self) -> None:
         fake_daytona = _FakeDaytona()
 
-        with (
-            patch("app.daytona_backend.load_config", return_value=self._fake_cfg()),
-            patch.dict("os.environ", {"DAYTONA_SNAPSHOT": "snapshot-a"}, clear=False),
-        ):
+        with patch("app.daytona_backend.load_config", return_value=self._fake_cfg(snapshot="snapshot-a")):
             sandbox = _create_daytona_sandbox(
                 daytona=fake_daytona,
                 create_params_cls=_AcceptAllParams,
@@ -71,10 +74,7 @@ class DaytonaSnapshotBindingTests(unittest.TestCase):
     def test_create_sandbox_omits_snapshot_when_env_is_empty(self) -> None:
         fake_daytona = _FakeDaytona()
 
-        with (
-            patch("app.daytona_backend.load_config", return_value=self._fake_cfg()),
-            patch.dict("os.environ", {"DAYTONA_SNAPSHOT": ""}, clear=False),
-        ):
+        with patch("app.daytona_backend.load_config", return_value=self._fake_cfg(snapshot=None)):
             _create_daytona_sandbox(
                 daytona=fake_daytona,
                 create_params_cls=_AcceptAllParams,
@@ -86,10 +86,7 @@ class DaytonaSnapshotBindingTests(unittest.TestCase):
     def test_create_sandbox_falls_back_when_snapshot_arg_is_unsupported(self) -> None:
         fake_daytona = _FakeDaytona()
 
-        with (
-            patch("app.daytona_backend.load_config", return_value=self._fake_cfg()),
-            patch.dict("os.environ", {"DAYTONA_SNAPSHOT": "snapshot-a"}, clear=False),
-        ):
+        with patch("app.daytona_backend.load_config", return_value=self._fake_cfg(snapshot="snapshot-a")):
             _create_daytona_sandbox(
                 daytona=fake_daytona,
                 create_params_cls=_NoSnapshotParams,

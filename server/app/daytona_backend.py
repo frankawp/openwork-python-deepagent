@@ -13,7 +13,6 @@ _DAYTONA_THREAD_KEY = "daytona"
 _DAYTONA_SANDBOX_ID_KEY = "sandbox_id"
 _DAYTONA_WORKSPACE_ROOT_KEY = "workspace_root"
 _DAYTONA_DEFAULT_WORKSPACE_ROOT = "/home/daytona"
-_DAYTONA_SNAPSHOT_ENV = "DAYTONA_SNAPSHOT"
 logger = logging.getLogger(__name__)
 
 
@@ -141,16 +140,23 @@ def _ensure_ssl_cert_file_env() -> None:
 
 def _create_daytona_client():
     try:
-        from daytona import Daytona
+        from daytona import Daytona, DaytonaConfig
     except Exception as e:  # pragma: no cover - import guard
         raise RuntimeError(
             "daytona SDK is not installed. Install server dependencies first."
         ) from e
 
+    cfg = load_config()
     _ensure_ssl_cert_file_env()
 
     try:
-        return Daytona()
+        return Daytona(
+            DaytonaConfig(
+                api_key=cfg.daytona.api_key,
+                api_url=cfg.daytona.api_url,
+                target=cfg.daytona.target,
+            )
+        )
     except Exception as e:
         raise RuntimeError(
             "Daytona is not configured. Set DAYTONA_API_KEY (and optionally DAYTONA_API_URL / DAYTONA_TARGET)."
@@ -159,7 +165,7 @@ def _create_daytona_client():
 
 def _create_daytona_sandbox(*, daytona: Any, create_params_cls: Any, thread_id: str) -> Any:
     cfg = load_config()
-    snapshot_name = (os.environ.get(_DAYTONA_SNAPSHOT_ENV) or "").strip()
+    snapshot_name = (cfg.daytona.snapshot or "").strip()
     base_kwargs = {
         "language": "python",
         "labels": {
