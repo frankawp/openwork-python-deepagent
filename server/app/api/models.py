@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..crypto import decrypt, encrypt
+from ..deep_agent_runtime import get_default_runtime_model_id
 from ..deps import get_db, require_admin
 from ..model_catalog import DEFAULT_MODEL_ID, MODELS, PROVIDERS
 from ..models import AppSetting, GlobalApiKey
@@ -20,6 +21,7 @@ def _get_default_model(db: Session) -> str:
 @router.get("", response_model=list[ModelConfigOut])
 def list_models(db: Session = Depends(get_db)):
     default_model = _get_default_model(db)
+    keys = {row.provider for row in db.query(GlobalApiKey).all()}
     result = []
     for model in MODELS:
         result.append(
@@ -29,7 +31,7 @@ def list_models(db: Session = Depends(get_db)):
                 provider=model.provider,
                 model=model.model,
                 description=model.description,
-                available=model.available,
+                available=model.provider in keys,
             )
         )
     # Keep default model first in list to match UX expectation
@@ -45,7 +47,10 @@ def list_providers(db: Session = Depends(get_db)):
 
 @router.get("/default")
 def get_default_model(db: Session = Depends(get_db)):
-    return {"model_id": _get_default_model(db)}
+    return {
+        "model_id": _get_default_model(db),
+        "runtime_model_id": get_default_runtime_model_id(),
+    }
 
 
 @router.post("/default")

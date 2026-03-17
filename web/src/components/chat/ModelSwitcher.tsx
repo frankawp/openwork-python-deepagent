@@ -161,7 +161,7 @@ export function ModelSwitcher({ threadId }: ModelSwitcherProps): React.JSX.Eleme
                       key={provider.id}
                       onClick={() => handleProviderClick(provider)}
                       className={cn(
-                        "w-full rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
+                        "flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
                         effectiveProviderId === provider.id
                           ? "bg-background/78 text-foreground shadow-sm"
                           : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
@@ -202,12 +202,18 @@ export function ModelSwitcher({ threadId }: ModelSwitcherProps): React.JSX.Eleme
                     {filteredModels.map((model) => (
                     <button
                       key={model.id}
-                      onClick={() => handleModelSelect(model.id)}
+                      onClick={() => {
+                        if (model.available) {
+                          handleModelSelect(model.id)
+                        }
+                      }}
+                      disabled={!model.available}
                       className={cn(
                           "w-full rounded-lg px-2 py-1.5 text-left font-mono text-xs transition-colors",
                           currentModel === model.id
                             ? "bg-background/78 text-foreground shadow-sm"
-                            : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                            : "text-muted-foreground hover:bg-background/50 hover:text-foreground",
+                          !model.available && "cursor-not-allowed opacity-45 hover:bg-transparent hover:text-muted-foreground"
                         )}
                       >
                         <span className="flex-1 truncate">{model.id}</span>

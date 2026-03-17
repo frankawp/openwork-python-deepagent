@@ -63,7 +63,13 @@ def _get_api_key(provider: str) -> str | None:
         db.close()
 
 
-def _get_default_model_id() -> str:
+def _find_model_config(model_id: str | None):
+    if not model_id:
+        return None
+    return next((m for m in MODELS if m.id == model_id), None)
+
+
+def _get_configured_default_model_id() -> str:
     db = SessionLocal()
     try:
         setting = db.get(AppSetting, "default_model")
@@ -72,22 +78,30 @@ def _get_default_model_id() -> str:
         db.close()
 
 
+def get_default_runtime_model_id() -> str:
+    model_id = _get_configured_default_model_id()
+    model = _find_model_config(model_id)
+    if model and _get_api_key(model.provider):
+        return model.id
+    if _get_api_key("deepseek"):
+        return DEEPSEEK_CHAT_MODEL_ID
+    return model_id
+
+
+def resolve_runtime_model_id(model_id: str | None) -> str:
+    return model_id or get_default_runtime_model_id()
+
+
 def _resolve_model(model_id: str | None) -> tuple[str, str]:
-    model_id = model_id or _get_default_model_id()
-    model = next((m for m in MODELS if m.id == model_id), None)
+    resolved_model_id = resolve_runtime_model_id(model_id)
+    model = _find_model_config(resolved_model_id)
     if model:
         return model.provider, model.model
-    return "deepseek", model_id
+    return "deepseek", resolved_model_id
 
 
 def resolve_runtime_model(model_id: str | None) -> tuple[str, str]:
-    provider, model_name = _resolve_model(model_id)
-
-    if provider != "deepseek" and not _get_api_key(provider) and _get_api_key("deepseek"):
-        provider = "deepseek"
-        model_name = DEEPSEEK_CHAT_MODEL_ID
-
-    return provider, model_name
+    return _resolve_model(model_id)
 
 
 def should_fallback_to_deepseek_chat(model_id: str | None) -> bool:

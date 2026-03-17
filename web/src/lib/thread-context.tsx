@@ -116,7 +116,7 @@ const createDefaultThreadState = (): ThreadState => ({
   subagents: [],
   pendingApproval: null,
   error: null,
-  currentModel: "claude-sonnet-4-5-20250929",
+  currentModel: "",
   skillsEnabled: true,
   openFiles: [],
   activeTab: "agent",
@@ -598,6 +598,9 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
           if (metadata.model) {
             // Update state directly to avoid triggering persistence in setCurrentModel
             updateThreadState(threadId, () => ({ currentModel: metadata.model as string }))
+          } else {
+            const defaultModel = await window.api.models.getDefault()
+            updateThreadState(threadId, () => ({ currentModel: defaultModel }))
           }
         }
       } catch (error) {

@@ -256,7 +256,8 @@ export function attachWindowApi() {
     models: {
       list: () => apiFetch("/models"),
       listProviders: () => apiFetch("/models/providers"),
-      getDefault: () => apiFetch("/models/default").then((res: any) => res.model_id),
+      getDefault: () =>
+        apiFetch("/models/default").then((res: any) => res.runtime_model_id || res.model_id),
       setDefault: (modelId: string) =>
         apiFetch("/models/default", { method: "POST", body: JSON.stringify({ model_id: modelId }) }),
       setApiKey: (provider: string, apiKey: string) =>
