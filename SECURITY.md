@@ -34,8 +34,8 @@ Include the following information in your report:
 
 This security policy applies to:
 
-- The openwork desktop application
-- The npm package `openwork`
+- The openwork browser UI
+- The openwork FastAPI backend
 - This GitHub repository
 
 ### Out of Scope

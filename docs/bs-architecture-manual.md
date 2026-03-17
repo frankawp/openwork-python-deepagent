@@ -521,7 +521,7 @@ interface Subagent {
 
 ### 3.5 Window API 注入 (`window-api.ts`)
 
-为了兼容 Electron IPC，通过 `attachWindowApi()` 注入 `window.api`：
+前端通过 `attachWindowApi()` 注入 `window.api`，把浏览器内的 REST/SSE 调用统一包装成同一套接口：
 
 ```typescript
 // 认证

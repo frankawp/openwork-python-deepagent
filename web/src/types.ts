@@ -1,4 +1,4 @@
-// Re-export types from electron for use in renderer
+// Shared frontend types for the browser UI
 export type ThreadStatus = "idle" | "busy" | "interrupted" | "error"
 
 export interface Thread {

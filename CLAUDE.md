@@ -4,12 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-openwork 是 [deepagentsjs](https://github.com/langchain-ai/deepagentsjs) 的桌面界面，提供具有文件系统访问能力、任务规划和子代理委托功能的 AI 智能体界面。
+openwork 是 [deepagentsjs](https://github.com/langchain-ai/deepagentsjs) 的 BS（Browser-Server）界面，提供具有文件系统访问能力、任务规划、技能和 MCP 集成的 AI 智能体工作台。
 
-项目正在从 Electron 桌面应用重构为 BS（Browser-Server）架构：
+当前代码结构：
 - **server/** - FastAPI Python 后端
 - **web/** - React TypeScript 前端
-- **src/** - 原有 Electron 应用（仍在维护）
 
 ---
 
@@ -29,23 +28,7 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 配置
-服务器通过 `server/config.yaml` 配置，首次运行需复制 `config.example.yaml`：
-
-```yaml
-database:
-  url: "mysql+pymysql://user:pass@host:3306/openwork"
-auth:
-  jwt_secret: "CHANGE_ME"
-  access_ttl_min: 60
-  refresh_ttl_days: 7
-workspace:
-  root: "/var/lib/openwork/workspaces"
-data:
-  dir: "/var/lib/openwork"
-admin:
-  email: "admin@example.com"
-  password: "admin123"
-```
+服务器通过 `server/.env` 配置，首次运行复制 `server/.env.example`。
 
 ### API 路由结构
 - `/auth` - JWT 认证（登录、登出、刷新 token）
@@ -88,9 +71,8 @@ npm run preview  # 预览构建结果
 - UI 状态（面板、侧边栏、看板视图）
 
 ### API 通信
-- RESTful API 通过 `window.api.*` 调用
+- RESTful API 通过 `window.api.*` 浏览器 shim 调用
 - Server-Sent Events (SSE) 用于 AI 流式响应
-- EventSource 用于文件变更监听
 
 ### 组件结构
 - `components/chat/` - 聊天界面、消息气泡、工具调用渲染
@@ -99,19 +81,6 @@ npm run preview  # 预览构建结果
 - `components/kanban/` - 看板视图
 - `components/tabs/` - 多标签页文件查看器
 - `components/ui/` - Radix UI 封装组件
-
----
-
-## 桌面应用（Electron）
-
-### 启动开发服务器
-```bash
-npm run dev    # electron-vite 开发模式
-npm run build  # 类型检查 + 构建
-npm run start  # 预览打包后的应用
-npm run lint   # ESLint 检查
-npm run format # Prettier 格式化
-```
 
 ---
 

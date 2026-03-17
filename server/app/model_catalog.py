@@ -26,7 +26,7 @@ PROVIDERS = [
     Provider(id="deepseek", name="DeepSeek"),
 ]
 
-# Mirrors src/main/ipc/models.ts (Jan 2026)
+# Shared model catalog used by the BS backend and browser UI.
 MODELS = [
     ModelConfig(
         id="claude-opus-4-5-20251101",

@@ -1,71 +1,120 @@
 # openwork
 
-[![npm][npm-badge]][npm-url] [![License: MIT][license-badge]][license-url]
+openwork is a browser-server workspace for deep agents. It combines:
 
-[npm-badge]: https://img.shields.io/npm/v/openwork.svg
-[npm-url]: https://www.npmjs.com/package/openwork
-[license-badge]: https://img.shields.io/badge/License-MIT-yellow.svg
-[license-url]: https://opensource.org/licenses/MIT
+- a FastAPI backend for auth, threads, models, skills, MCP, and Daytona sandboxes
+- a React frontend for chat, files, tasks, agents, and capability management
+- a Daytona-backed execution model so each thread can work inside an isolated workspace
 
-A desktop interface for [deepagentsjs](https://github.com/langchain-ai/deepagentsjs) — an opinionated harness for building deep agents with filesystem capabilities planning, and subagent delegation.
+![Agent workspace](docs/openwork-agent-bs.png)
 
-![openwork screenshot](docs/screenshot.png)
+![Skills and MCP management](docs/openwork-skills-mcp-bs.png)
 
 > [!CAUTION]
-> openwork gives AI agents direct access to your filesystem and the ability to execute shell commands. Always review tool calls before approving them, and only run in workspaces you trust.
+> openwork gives agents access to files, tools, and remote services. Review approvals carefully and only run against workspaces and MCP servers you trust.
 
-## Get Started
+## Architecture
 
-```bash
-# Run directly with npx
-npx openwork
-
-# Or install globally
-npm install -g openwork
-openwork
+```text
+Browser UI (Vite/React)
+        |
+        | HTTP + SSE
+        v
+FastAPI backend
+        |
+        | Daytona SDK
+        v
+Per-thread Daytona sandbox
 ```
 
-Requires Node.js 18+.
+## Repository layout
 
-### From Source
+```text
+openwork/
+├── server/   # FastAPI app, models, migrations, runtime, tests
+├── web/      # React + Vite frontend
+└── docs/     # Architecture notes and screenshots
+```
+
+## Prerequisites
+
+- Node.js 20+
+- npm 10+
+- Python 3.11+
+- `uv`
+- MySQL
+- Daytona account and API credentials
+
+## Backend setup
 
 ```bash
-git clone https://github.com/langchain-ai/openwork.git
-cd openwork
+cd server
+cp .env.example .env
+```
+
+Fill at least these values in `server/.env`:
+
+```dotenv
+DATABASE_URL=mysql+pymysql://user:pass@host:3306/openwork
+JWT_SECRET=CHANGE_ME
+WORKSPACE_ROOT=/var/lib/openwork/workspaces
+DATA_DIR=/var/lib/openwork
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=admin123
+DAYTONA_API_KEY=
+DAYTONA_API_URL=https://app.daytona.io/api
+DAYTONA_TARGET=us
+DAYTONA_SNAPSHOT=
+```
+
+Then install dependencies and start the server:
+
+```bash
+cd server
+uv sync
+alembic upgrade head
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+## Frontend setup
+
+```bash
+cd web
 npm install
 npm run dev
 ```
 
-Or configure them in-app via the settings panel.
+By default the frontend connects to `http://127.0.0.1:8000` in local development.
 
-## Server (B/S)
+## What the system supports
+
+- authenticated thread-based agent sessions
+- SSE streaming responses
+- tool approvals and interrupt/resume flows
+- file browsing and file preview from the Daytona workspace
+- user-managed skills
+- user-managed MCP servers and per-thread MCP binding
+- Daytona snapshot-based sandbox provisioning
+
+## Useful commands
 
 ```bash
-cd server
-./venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Build the frontend
+npm run build:web
+
+# Run backend tests
+npm run test:server
 ```
 
-## Web (B/S)
+## Notes
 
-```bash
-cd web
-npm run dev
-```
-
-## Supported Models
-
-| Provider  | Models                                                                                 |
-| --------- | -------------------------------------------------------------------------------------- |
-| Anthropic | Claude Opus 4.5, Claude Sonnet 4.5, Claude Haiku 4.5, Claude Opus 4.1, Claude Sonnet 4 |
-| OpenAI    | GPT-5.2, GPT-5.1, o3, o3 Mini, o4 Mini, o1, GPT-4.1, GPT-4o                            |
-| Google    | Gemini 3 Pro Preview, Gemini 3 Flash Preview, Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.5 Flash Lite |
+- `DAYTONA_SNAPSHOT` is optional. Leave it empty if you do not want new threads to provision from a snapshot.
+- MCP and skill state are persisted in the backend database; runtime execution still happens inside Daytona sandboxes.
 
 ## Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-Report bugs via [GitHub Issues](https://github.com/langchain-ai/openwork/issues).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE).

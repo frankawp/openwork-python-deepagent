@@ -12,7 +12,7 @@ import {
 
 /* eslint-disable react-refresh/only-export-components */
 import { useStream } from "@langchain/langgraph-sdk/react"
-import { ElectronIPCTransport } from "./electron-transport"
+import { WindowApiTransport } from "./window-api-transport"
 import type { Message, Todo, FileInfo, Subagent, HITLRequest } from "@/types"
 import type { DeepAgent } from "./deep-agent"
 
@@ -173,7 +173,7 @@ function ThreadStreamHolder({
   onCustomEvent: (data: CustomEventData) => void
   onError: (error: Error) => void
 }): null {
-  const transport = useMemo(() => new ElectronIPCTransport(), [])
+  const transport = useMemo(() => new WindowApiTransport(), [])
 
   // Use refs to avoid stale closures
   const onCustomEventRef = useRef(onCustomEvent)

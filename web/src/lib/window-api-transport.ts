@@ -76,11 +76,10 @@ interface CompletedToolCall {
 }
 
 /**
- * Custom transport for useStream that uses Electron IPC instead of HTTP.
- * This allows useStream to work seamlessly in an Electron app where the
- * LangGraph agent runs in the main process.
+ * Stream transport backed by the browser-side window API shim.
+ * The shim talks to the FastAPI backend over HTTP and SSE.
  */
-export class ElectronIPCTransport implements UseStreamTransport {
+export class WindowApiTransport implements UseStreamTransport {
   // Track current message ID for grouping tokens across chunks
   private currentMessageId: string | null = null
 
@@ -124,7 +123,7 @@ export class ElectronIPCTransport implements UseStreamTransport {
       return this.createErrorGenerator("MISSING_MESSAGE", "Message content is required")
     }
 
-    // Create an async generator that bridges IPC events
+    // Create an async generator that bridges window API events
     return this.createStreamGenerator(
       threadId,
       messageContent,
@@ -168,9 +167,8 @@ export class ElectronIPCTransport implements UseStreamTransport {
       }
     }
 
-    const handleIpcEvent = (ipcEvent: unknown) => {
-      // Convert IPC events to SDK format
-      const sdkEvents = this.convertToSDKEvents(ipcEvent as IPCEvent, threadId)
+    const handleStreamEvent = (rawEvent: unknown) => {
+      const sdkEvents = this.convertToSDKEvents(rawEvent as IPCEvent, threadId)
 
       for (const sdkEvent of sdkEvents) {
         if (sdkEvent.event === "done" || sdkEvent.event === "error") {
@@ -191,16 +189,15 @@ export class ElectronIPCTransport implements UseStreamTransport {
     }
 
     const hasResumeCommand = !!(command && typeof command === "object" && "resume" in command)
-    const isElectron = Boolean(window.api?.process?.platform)
     const useInterruptEndpoint =
-      hasResumeCommand && !isElectron && typeof window.api.agent.interrupt === "function"
+      hasResumeCommand && typeof window.api.agent.interrupt === "function"
 
-    // Start the stream via API (pass modelId and skillsEnabled)
+    // Start the stream via the browser API shim (pass modelId and skillsEnabled)
     const cleanup = useInterruptEndpoint
       ? window.api.agent.interrupt(
           threadId,
           (command as { resume?: unknown }).resume,
-          handleIpcEvent,
+          handleStreamEvent,
           modelId,
           skillsEnabled
         )
@@ -208,7 +205,7 @@ export class ElectronIPCTransport implements UseStreamTransport {
           threadId,
           message,
           command,
-          handleIpcEvent,
+          handleStreamEvent,
           modelId,
           skillsEnabled
         )
@@ -516,7 +513,7 @@ export class ElectronIPCTransport implements UseStreamTransport {
         // Usage metadata is present on completed AI messages (not streaming chunks)
         const usageMetadata = kwargs.usage_metadata || kwargs.response_metadata?.usage
         if (usageMetadata) {
-          console.log("[ElectronTransport] Found usage_metadata:", {
+          console.log("[WindowApiTransport] Found usage_metadata:", {
             input_tokens: usageMetadata.input_tokens,
             output_tokens: usageMetadata.output_tokens,
             total_tokens: usageMetadata.total_tokens,
